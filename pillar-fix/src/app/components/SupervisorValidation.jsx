@@ -1,15 +1,24 @@
-import { Eye } from 'lucide-react';
+import { useState } from 'react';
+import { Eye, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
 
 export function SupervisorValidation({ submissions, onReview }) {
+  const [statusFilter, setStatusFilter] = useState('all');
   const pendingReview = submissions.filter(
     s => s.detectionStatus === 'Completed' && !s.overallRisk
   );
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString('en-AU', {
+    return new Date(dateString).toLocaleString('en-MY', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -32,6 +41,27 @@ export function SupervisorValidation({ submissions, onReview }) {
     );
   };
 
+  const getValidationBadge = (status) => {
+    const colors = {
+      Pending: 'bg-yellow-100 text-yellow-700',
+      Rejected: 'bg-red-100 text-red-700',
+      Approved: 'bg-green-100 text-green-700',
+    };
+
+    return (
+      <Badge className={colors[status] || colors.Pending}>
+        {status || 'Pending'}
+      </Badge>
+    );
+  };
+
+  // Filter submissions based on validation status
+  const filteredSubmissions = submissions.filter(submission => {
+    if (statusFilter === 'all') return true;
+    const status = submission.validationStatus || 'Pending';
+    return status === statusFilter;
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -41,17 +71,7 @@ export function SupervisorValidation({ submissions, onReview }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Pending Review
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{pendingReview.length}</div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
@@ -64,6 +84,44 @@ export function SupervisorValidation({ submissions, onReview }) {
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              Approved
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">
+              {submissions.filter(s => (s.validationStatus || 'Pending') === 'Approved').length}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              Rejected
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">
+              {submissions.filter(s => (s.validationStatus || 'Pending') === 'Rejected').length}
+            </div>
+          </CardContent>
+        </Card>        
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              Pending Review
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{pendingReview.length}</div>
+          </CardContent>
+        </Card>        
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
@@ -75,21 +133,40 @@ export function SupervisorValidation({ submissions, onReview }) {
               {submissions.filter(s => s.overallRisk).length}
             </div>
           </CardContent>
-        </Card>
+        </Card>     
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Pending Reviews</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Submissions</CardTitle>
+            <div className="flex items-center gap-2">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <Filter className="h-4 w-4 text-gray-500" />
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Rejected">Rejected</SelectItem>
+                  <SelectItem value="Approved">Approved</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {submissions.length === 0 ? (
+            {filteredSubmissions.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
-                No submissions pending review
+                {submissions.length === 0 
+                  ? 'No submissions pending review'
+                  : `No submissions with ${statusFilter === 'all' ? 'any' : statusFilter} status`
+                }
               </div>
             ) : (
-              submissions.map((submission) => {
+              filteredSubmissions.map((submission) => {
                 const faultCount = submission.detectionResults?.reduce(
                   (sum, r) => sum + r.boundingBoxes.length, 0
                 ) || 0;
@@ -116,6 +193,7 @@ export function SupervisorValidation({ submissions, onReview }) {
                         <div className="flex items-center gap-2">
                           <h4 className="font-semibold">{submission.pillarId}</h4>
                           {submission.overallRisk && getRiskBadge(submission.overallRisk)}
+                          {getValidationBadge(submission.validationStatus)}
                           {faultCount > 0 && (
                             <Badge variant="outline">
                               {faultCount} fault{faultCount !== 1 ? 's' : ''}
