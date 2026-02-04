@@ -16,6 +16,7 @@ import { UserManagement } from '@/app/components/UserManagement';
 import { EnhancedMapView } from '@/app/components/EnhancedMapView';
 import { mockAuditTasks, simulateAIDetection, createMockMaintenanceItem, mockUsers } from '@/app/mockData';
 import { toast } from 'sonner';
+import logo from './components/logo/FINAL.svg'
 
 export default function App() {
   // Auth state
@@ -248,13 +249,16 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-lg">
-                <Zap className="h-6 w-6 text-white" />
+              <div className="flex items-center justify-center w-12 h-12">
+                <img src={logo} className='w-8'/>
               </div>
               <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
-                  PillarFix
-                </h1>
+                <span className="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+                Pillar
+                </span>
+                <span className = "text-3xl font-bold text-center bg-gradient-to-r from-red-600 to-red-700 bg-clip-text text-transparent">
+                Fix
+                </span>
                 <p className="text-xs text-gray-500">Intelligent Maintenance System</p>
               </div>
             </div>
