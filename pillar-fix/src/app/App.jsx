@@ -1,0 +1,447 @@
+import { useState, useEffect } from 'react';
+import { LayoutDashboard, ClipboardCheck, CheckSquare, Wrench, BarChart3, Menu, X, Zap, Map, Users as UsersIcon, LogOut } from 'lucide-react';
+import { Button } from '@/app/components/ui/button';
+import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
+import { Toaster } from '@/app/components/ui/sonner';
+import { TechnicianDashboard } from '@/app/components/TechnicianDashboard';
+import { AuditForm } from '@/app/components/AuditForm';
+import { DetectionResults } from '@/app/components/DetectionResults';
+import { SupervisorValidation } from '@/app/components/SupervisorValidation';
+import { SupervisorReview } from '@/app/components/SupervisorReview';
+import { MaintenanceList } from '@/app/components/MaintenanceList';
+import { MaintenanceDetail } from '@/app/components/MaintenanceDetail';
+import { Analytics } from '@/app/components/Analytics';
+import { Login } from '@/app/components/Login';
+import { UserManagement } from '@/app/components/UserManagement';
+import { EnhancedMapView } from '@/app/components/EnhancedMapView';
+import { mockAuditTasks, simulateAIDetection, createMockMaintenanceItem, mockUsers } from '@/app/mockData';
+import { toast } from 'sonner';
+
+export default function App() {
+  // Auth state
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // App state
+  const [currentView, setCurrentView] = useState('tech-dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // Data management
+  const [auditTasks, setAuditTasks] = useState(mockAuditTasks);
+  const [submissions, setSubmissions] = useState([]);
+  const [maintenanceItems, setMaintenanceItems] = useState([]);
+  const [users, setUsers] = useState(mockUsers);
+  
+  // Selected items
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
+  const [selectedMaintenanceId, setSelectedMaintenanceId] = useState(null);
+
+  // Simulate AI processing queue
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const interval = setInterval(() => {
+      setSubmissions(prev => {
+        const queued = prev.filter(s => s.detectionStatus === 'Queued');
+        if (queued.length > 0) {
+          const toProcess = queued[0];
+          setTimeout(() => {
+            setSubmissions(p => p.map(s => 
+              s.id === toProcess.id 
+                ? { ...s, detectionStatus: 'Processing' }
+                : s
+            ));
+            
+            setTimeout(() => {
+              const results = simulateAIDetection(toProcess);
+              const overallRisk = results.some(r => r.boundingBoxes.some(b => b.faultType === 'Exposed Wiring' || b.faultType === 'Physical Damage')) 
+                ? 'Critical'
+                : results.some(r => r.boundingBoxes.length > 2)
+                ? 'High'
+                : results.some(r => r.boundingBoxes.length > 0)
+                ? 'Medium'
+                : 'Low';
+
+              setSubmissions(p => p.map(s =>
+                s.id === toProcess.id
+                  ? { ...s, detectionStatus: 'Completed', detectionResults: results, overallRisk }
+                  : s
+              ));
+              
+              toast.success(`AI detection completed for ${toProcess.pillarId}`);
+            }, 3000);
+          }, 1000);
+        }
+        return prev;
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
+  // Auth handlers
+  const handleLogin = (user) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+    
+    // Set default view based on user role
+    if (user.role === 'supervisor') {
+      setCurrentView('map');
+    } else if (user.role === 'manager') {
+      setCurrentView('analytics');
+    } else if (user.role === 'admin') {
+      setCurrentView('user-management');
+    } else {
+      setCurrentView('map');
+    }
+    
+    toast.success(`Welcome, ${user.name}!`);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+    setCurrentView('tech-dashboard');
+    toast.info('Logged out successfully');
+  };
+
+  // App handlers
+  const handleStartAudit = (taskId) => {
+    setSelectedTaskId(taskId);
+    const task = auditTasks.find(t => t.id === taskId);
+    if (task && task.status === 'Pending') {
+      setAuditTasks(prev => prev.map(t =>
+        t.id === taskId ? { ...t, status: 'In Progress' } : t
+      ));
+    }
+    setCurrentView('audit-form');
+    setMobileMenuOpen(false);
+  };
+
+  const handleViewAIResultFromTask = (taskId) => {
+    // Find the submission associated with this task
+    const submission = submissions.find(s => s.taskId === taskId);
+    if (submission) {
+      setSelectedSubmissionId(submission.id);
+      setCurrentView('detection-results');
+      setMobileMenuOpen(false);
+    } else {
+      toast.error('No AI detection results found for this task');
+    }
+  };
+
+  const handleSubmitAudit = (submission) => {
+    setSubmissions(prev => [submission, ...prev]);
+    setAuditTasks(prev => prev.map(t =>
+      t.id === submission.taskId ? { ...t, status: 'Completed' } : t
+    ));
+    setCurrentView('tech-dashboard');
+  };
+
+  const handleViewDetection = (submissionId) => {
+    setSelectedSubmissionId(submissionId);
+    setCurrentView('detection-results');
+    setMobileMenuOpen(false);
+  };
+
+  const handleSendToSupervisor = (submissionId) => {
+    toast.success('Detection sent to supervisor for validation');
+    // Go back to audit tasks dashboard
+    setCurrentView('tech-dashboard');
+  };
+
+  const handleReviewSubmission = (submissionId) => {
+    setSelectedSubmissionId(submissionId);
+    setCurrentView('supervisor-review');
+    setMobileMenuOpen(false);
+  };
+
+  const handleApproveForMaintenance = (submissionId, approvalData) => {
+    const submission = submissions.find(s => s.id === submissionId);
+    if (submission) {
+      const maintenanceItem = createMockMaintenanceItem(submission, approvalData);
+      setMaintenanceItems(prev => [maintenanceItem, ...prev]);
+    }
+    setCurrentView('maintenance-list');
+  };
+
+  const handleRejectSubmission = (submissionId, reason) => {
+    toast.info('Submission rejected');
+    setCurrentView('supervisor-validation');
+  };
+
+  const handleViewMaintenanceDetail = (itemId) => {
+    setSelectedMaintenanceId(itemId);
+    setCurrentView('maintenance-detail');
+    setMobileMenuOpen(false);
+  };
+
+  const handleUpdateWorkLog = (itemId, log) => {
+    setMaintenanceItems(prev => prev.map(item =>
+      item.id === itemId
+        ? { ...item, workLogs: [...item.workLogs, log] }
+        : item
+    ));
+  };
+
+  const handleSubmitCompletion = (itemId, completionData) => {
+    setMaintenanceItems(prev => prev.map(item =>
+      item.id === itemId
+        ? { ...item, status: 'Completed', completion: completionData }
+        : item
+    ));
+    toast.success('Completion images submitted');
+  };
+
+
+  const handleUpdateMaintenanceStatus = (itemId, status) => {
+    setMaintenanceItems(prev => prev.map(item =>
+      item.id === itemId
+        ? { ...item, status }
+        : item
+    ));
+  };
+
+  const handleAssignTask = (taskId, technicianName) => {
+    setAuditTasks(prev => prev.map(task =>
+      task.id === taskId
+        ? { ...task, assignedTo: technicianName }
+        : task
+    ));
+  };
+
+  // Show login if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <>
+        <Login onLogin={handleLogin} />
+        <Toaster />
+      </>
+    );
+  }
+
+  const selectedTask = auditTasks.find(t => t.id === selectedTaskId);
+  const selectedSubmission = submissions.find(s => s.id === selectedSubmissionId);
+  const selectedMaintenance = maintenanceItems.find(m => m.id === selectedMaintenanceId);
+
+  // Define menu items based on user role
+  const getMenuItems = () => {
+    const baseItems = [
+      { id: 'analytics', label: 'Analytics', icon: BarChart3, view: 'analytics', roles: ['manager', 'admin'] },
+      { id: 'map', label: 'Map', icon: Map, view: 'map', roles: ['technician', 'supervisor', 'manager', 'admin'] },
+      { id: 'tech-dashboard', label: 'Audit Tasks', icon: ClipboardCheck, view: 'tech-dashboard', roles: ['technician', 'supervisor', 'manager', 'admin'] },
+      { id: 'supervisor-validation', label: 'Validation', icon: CheckSquare, view: 'supervisor-validation', roles: ['supervisor', 'manager', 'admin'] },
+      { id: 'maintenance-list', label: 'Maintenance', icon: Wrench, view: 'maintenance-list', roles: ['technician', 'supervisor', 'manager', 'admin'] },
+      { id: 'user-management', label: 'Users', icon: UsersIcon, view: 'user-management', roles: ['admin'] },
+    ];
+
+    return baseItems.filter(item => currentUser && item.roles.includes(currentUser.role));
+  };
+
+  const menuItems = getMenuItems();
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg shadow-lg">
+                <Zap className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+                  PillarFix
+                </h1>
+                <p className="text-xs text-gray-500">Intelligent Maintenance System</p>
+              </div>
+            </div>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden lg:flex items-center gap-2">
+              {menuItems.map((item) => (
+                <Button
+                  key={item.id}
+                  variant={currentView === item.view ? 'default' : 'ghost'}
+                  onClick={() => {
+                    setCurrentView(item.view);
+                    setSelectedTaskId(null);
+                    setSelectedSubmissionId(null);
+                    setSelectedMaintenanceId(null);
+                  }}
+                  className="gap-2"
+                  size="sm"
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </Button>
+              ))}
+              
+              <div className="flex items-center gap-2 ml-4 pl-4 border-l">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-blue-100 text-blue-700">
+                    {currentUser?.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden xl:block">
+                  <p className="text-sm font-medium">{currentUser?.name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{currentUser?.role}</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden xl:inline">Logout</span>
+                </Button>
+              </div>
+            </nav>
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+            >
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Navigation */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden border-t bg-white shadow-lg">
+            <nav className="px-4 py-4 space-y-2">
+              {menuItems.map((item) => (
+                <Button
+                  key={item.id}
+                  variant={currentView === item.view ? 'default' : 'ghost'}
+                  onClick={() => {
+                    setCurrentView(item.view);
+                    setSelectedTaskId(null);
+                    setSelectedSubmissionId(null);
+                    setSelectedMaintenanceId(null);
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full justify-start gap-2"
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </Button>
+              ))}
+              <div className="pt-4 border-t">
+                <div className="flex items-center gap-3 mb-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="bg-blue-100 text-blue-700">
+                      {currentUser?.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="font-medium">{currentUser?.name}</p>
+                    <p className="text-sm text-muted-foreground capitalize">{currentUser?.role}</p>
+                  </div>
+                </div>
+                <Button variant="outline" onClick={handleLogout} className="w-full gap-2">
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </Button>
+              </div>
+            </nav>
+          </div>
+        )}
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {currentView === 'tech-dashboard' && (
+          <TechnicianDashboard
+            tasks={auditTasks}
+            submissions={submissions}
+            onStartAudit={handleStartAudit}
+            onViewAIResult={handleViewAIResultFromTask}
+            currentUser={currentUser}
+            technicians={users}
+            onUpdateTasks={setAuditTasks} 
+            onAssignTask={handleAssignTask}
+          />
+        )}
+
+        {currentView === 'audit-form' && selectedTask && (
+          <AuditForm
+            task={selectedTask}
+            onBack={() => setCurrentView('tech-dashboard')}
+            onSubmit={handleSubmitAudit}
+          />
+        )}
+
+        {currentView === 'detection-results' && selectedSubmission && (
+          <DetectionResults
+            submission={selectedSubmission}
+            onBack={() => setCurrentView('tech-dashboard')}
+            onSendToSupervisor={handleSendToSupervisor}
+          />
+        )}
+
+        {currentView === 'supervisor-validation' && (
+          <SupervisorValidation
+            submissions={submissions.filter(s => s.detectionStatus === 'Completed')}
+            onReview={handleReviewSubmission}
+          />
+        )}
+
+        {currentView === 'supervisor-review' && selectedSubmission && (
+          <SupervisorReview
+            submission={selectedSubmission}
+            onBack={() => setCurrentView('supervisor-validation')}
+            onApprove={handleApproveForMaintenance}
+            onReject={handleRejectSubmission}
+          />
+        )}
+
+        {currentView === 'maintenance-list' && (
+          <MaintenanceList
+            items={maintenanceItems}
+            onViewDetails={handleViewMaintenanceDetail}
+            onUpdateStatus={handleUpdateMaintenanceStatus}
+          />
+        )}
+
+        {currentView === 'maintenance-detail' && selectedMaintenance && (
+          <MaintenanceDetail
+            item={selectedMaintenance}
+            onBack={() => setCurrentView('maintenance-list')}
+            onUpdateWorkLog={handleUpdateWorkLog}
+            onSubmitCompletion={handleSubmitCompletion}
+            onUpdateStatus={handleUpdateMaintenanceStatus}
+          />
+        )}
+
+        {currentView === 'analytics' && (
+          <Analytics maintenanceItems={maintenanceItems} />
+        )}
+
+        {currentView === 'user-management' && currentUser && (
+          <UserManagement
+            currentUser={currentUser}
+            users={users}
+            onUpdateUsers={setUsers}
+          />
+        )}
+
+        {currentView === 'map' && (
+          <EnhancedMapView 
+            maintenanceItems={maintenanceItems}
+            auditTasks={auditTasks}
+            submissions={submissions}
+            onPillarSelect={(pillarId) => {
+              const item = maintenanceItems.find(m => m.pillarId === pillarId);
+              if (item) {
+                handleViewMaintenanceDetail(item.id);
+              }
+            }}
+          />
+        )}
+      </main>
+
+      <Toaster />
+    </div>
+  );
+}
