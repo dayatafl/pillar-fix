@@ -189,13 +189,13 @@ export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
               </div>
 
               <div>
-                <Label htmlFor="cost">Estimated Cost ($)</Label>
+                <Label htmlFor="cost">Estimated Cost (RM)</Label>
                 <input
                   id="cost"
                   type="number"
                   value={estimatedCost}
                   onChange={(e) => setEstimatedCost(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="flex h-10 w-full rounded-md border border-input bg-input-background px-3 py-2 text-sm"
                 />
               </div>
 
@@ -210,9 +210,9 @@ export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
                 />
               </div>
 
-              <Button onClick={handleApprove} className="w-full" size="lg">
+              <Button onClick={handleApprove} className="w-full bg-green-600" size="lg">
                 <CheckCircle className="h-5 w-5 mr-2" />
-                Approve for Maintenance
+                Approve Maintenance
               </Button>
             </CardContent>
           </Card>
@@ -239,7 +239,7 @@ export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
                 className="w-full"
               >
                 <XCircle className="h-5 w-5 mr-2" />
-                Reject
+                Reject Maintenance
               </Button>
             </CardContent>
           </Card>

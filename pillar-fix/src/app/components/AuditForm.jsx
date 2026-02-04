@@ -117,6 +117,7 @@ export function AuditForm({ task, onBack, onSubmit }) {
       submittedBy: task.assignedTo,
       submittedAt: new Date().toISOString(),
       detectionStatus: 'Queued',
+      validationStatus: 'Pending', //added
     };
 
     onSubmit(submission);
