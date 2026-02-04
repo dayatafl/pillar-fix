@@ -375,8 +375,10 @@ export default function App() {
         {currentView === 'detection-results' && selectedSubmission && (
           <DetectionResults
             submission={selectedSubmission}
+            currentUser={currentUser}
             onBack={() => setCurrentView('tech-dashboard')}
             onSendToSupervisor={handleSendToSupervisor}
+            onViewValidation={handleReviewSubmission}
           />
         )}
 

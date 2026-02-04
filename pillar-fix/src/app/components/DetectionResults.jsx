@@ -5,10 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/ca
 import { Badge } from '@/app/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 
-export function DetectionResults({ submission, onBack, onSendToSupervisor }) {
+export function DetectionResults({ submission, onBack, onSendToSupervisor, currentUser, onViewValidation }) {
   const [selectedSide, setSelectedSide] = useState('front');
 
   const currentResult = submission.detectionResults?.find(r => r.side === selectedSide);
+  const isSupervisorOrAbove = currentUser && ['supervisor', 'manager', 'admin'].includes(currentUser.role);
+
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString('en-AU', {
@@ -62,11 +64,15 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor }) {
             <p className="text-gray-600 mt-1">{submission.pillarId}</p>
           </div>
         </div>
-
-        <Button onClick={() => onSendToSupervisor(submission.id)} size="lg">
+        {isSupervisorOrAbove ? (
+          <Button onClick={() => onViewValidation(submission.id)} size="lg">
           <Send className="h-5 w-5 mr-2" />
-          Send to Supervisor
-        </Button>
+          View Validation
+          </Button> 
+        ) : <Button onClick={() => onSendToSupervisor(submission.id)} size="lg">
+          <Send className="h-5 w-5 mr-2" />
+          Send to Supervisor 
+          </Button> }
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
