@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Eye, Filter } from 'lucide-react';
+import { Eye, Filter,  CheckCircle, Siren, AlertCircle, Clock, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -74,9 +74,12 @@ export function SupervisorValidation({ submissions, onReview }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
+            <div className = "flex items-center justify-between">
             <CardTitle className="text-sm font-medium text-gray-600">
               High Priority
             </CardTitle>
+            <Siren className="h-5 w-5 text-red-500"/>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
@@ -87,9 +90,12 @@ export function SupervisorValidation({ submissions, onReview }) {
 
         <Card>
           <CardHeader className="pb-2">
+            <div className = "flex items-center justify-between">
             <CardTitle className="text-sm font-medium text-gray-600">
               Approved
             </CardTitle>
+            <CheckCircle className="h-5 w-5 text-green-600" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
@@ -100,9 +106,12 @@ export function SupervisorValidation({ submissions, onReview }) {
 
         <Card>
           <CardHeader className="pb-2">
+            <div className = "flex items-center justify-between">
             <CardTitle className="text-sm font-medium text-gray-600">
               Rejected
             </CardTitle>
+            <AlertCircle className="h-5 w-5 text-red-500" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
@@ -113,9 +122,12 @@ export function SupervisorValidation({ submissions, onReview }) {
 
         <Card>
           <CardHeader className="pb-2">
+            <div className = "flex items-center justify-between">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Pending Review
+              Pending
             </CardTitle>
+            <Clock className="h-5 w-5 text-yellow-500" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{pendingReview.length}</div>
@@ -124,9 +136,12 @@ export function SupervisorValidation({ submissions, onReview }) {
 
         <Card>
           <CardHeader className="pb-2">
+            <div className = "flex items-center justify-between">
             <CardTitle className="text-sm font-medium text-gray-600">
               Total Reviewed
             </CardTitle>
+            <MapPin className="h-5 w-5 text-blue-600" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
@@ -136,28 +151,25 @@ export function SupervisorValidation({ submissions, onReview }) {
         </Card>     
       </div>
 
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px]">
+              <Filter className="h-4 w-4 text-gray-500" />
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="Pending">Pending</SelectItem>
+              <SelectItem value="Rejected">Rejected</SelectItem>
+              <SelectItem value="Approved">Approved</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Submissions</CardTitle>
-            <div className="flex items-center gap-2">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <Filter className="h-4 w-4 text-gray-500" />
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="Pending">Pending</SelectItem>
-                  <SelectItem value="Rejected">Rejected</SelectItem>
-                  <SelectItem value="Approved">Approved</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
         <CardContent>
-          <div className="space-y-3">
+          <div className="py-4 space-y-3">
             {filteredSubmissions.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 {submissions.length === 0 

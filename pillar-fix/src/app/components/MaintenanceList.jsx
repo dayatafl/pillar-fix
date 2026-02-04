@@ -28,7 +28,7 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
 
   const stats = {
     total: items.length,
-    pending: items.filter(i => i.status === 'Pending').length,
+    pending: items.filter(i => i.status === 'Pending' || i.status === 'Approved').length,
     inProgress: items.filter(i => i.status === 'In Progress').length,
     completed: items.filter(i => i.status === 'Completed').length,
     totalCost: items.reduce((sum, i) => sum + i.estimatedCost, 0),

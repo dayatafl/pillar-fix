@@ -165,29 +165,25 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
       title: 'Total Tasks',
       value: stats.total,
       icon: MapPin,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50',
+      color: 'text-blue-500',
     },
     {
       title: 'Pending',
       value: stats.pending,
       icon: Clock,
-      color: 'text-yellow-600',
-      bgColor: 'bg-yellow-50',
+      color: 'text-yellow-500',
     },
     {
       title: 'In Progress',
       value: stats.inProgress,
       icon: AlertCircle,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50',
+      color: 'text-orange-500',
     },
     {
       title: 'Completed',
       value: stats.completed,
       icon: CheckCircle,
-      color: 'text-green-600',
-      bgColor: 'bg-green-50',
+      color: 'text-green-500',
     },
   ];
 
@@ -255,7 +251,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
             </div>
           </div>
           {isCalendarFilterOpen && (
-            <div className="absolute z-50 mt-2">
+            <div className="absolute z-50 mt-12">
               <div className="border rounded-lg p-2 bg-gray-50">
                 <Calendar
                   mode="single"
