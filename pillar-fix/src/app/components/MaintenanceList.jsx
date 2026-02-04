@@ -11,6 +11,10 @@ import {
 } from '@/app/components/ui/select';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { Clock } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
+import { MapPin } from 'lucide-react';
+import { Banknote } from 'lucide-react';
 
 export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
   const [statusFilter, setStatusFilter] = useState('all');
@@ -24,16 +28,15 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
 
   const stats = {
     total: items.length,
-    pending: items.filter(i => i.status === 'Pending Approval').length,
-    approved: items.filter(i => i.status === 'Approved' || i.status === 'Scheduled').length,
+    pending: items.filter(i => i.status === 'Pending').length,
     inProgress: items.filter(i => i.status === 'In Progress').length,
-    completed: items.filter(i => i.status === 'Completed' || i.status === 'Verified').length,
+    completed: items.filter(i => i.status === 'Completed').length,
     totalCost: items.reduce((sum, i) => sum + i.estimatedCost, 0),
   };
 
   const getStatusBadge = (status) => {
     const colors = {
-      'Pending Approval': 'bg-yellow-100 text-yellow-700',
+      'Pending': 'bg-yellow-100 text-yellow-700',
       'Approved': 'bg-green-100 text-green-700',
       'Scheduled': 'bg-blue-100 text-blue-700',
       'In Progress': 'bg-purple-100 text-purple-700',
@@ -83,7 +86,10 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
+            <div className = "flex items-center justify-between">
             <CardTitle className="text-sm font-medium text-gray-600">Total Items</CardTitle>
+            <MapPin className="h-5 w-5 text-blue-600" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.total}</div>
@@ -91,7 +97,10 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
         </Card>
         <Card>
           <CardHeader className="pb-2">
+            <div className = "flex items-center justify-between">
             <CardTitle className="text-sm font-medium text-gray-600">Pending</CardTitle>
+            <AlertCircle className="h-5 w-5 text-red-500" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.pending}</div>
@@ -99,15 +108,10 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Approved</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.approved}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">In Progress</CardTitle>
+            <div className = "flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-gray-600">In Progress</CardTitle>
+              <Clock className="h-5 w-5 text-yellow-500" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.inProgress}</div>
@@ -115,10 +119,24 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Total Cost</CardTitle>
+            <div className = "flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-gray-600">Completed</CardTitle>
+            <CheckCircle className="h-5 w-5 text-green-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${stats.totalCost.toLocaleString()}</div>
+            <div className="text-3xl font-bold">{stats.completed}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <div className = "flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-gray-600">Total Cost</CardTitle>
+             <Banknote className="h-5 w-5 text-blue-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">RM{stats.totalCost.toLocaleString()}</div>
           </CardContent>
         </Card>
       </div>
@@ -131,12 +149,10 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="Pending Approval">Pending Approval</SelectItem>
+            <SelectItem value="Pending">Pending</SelectItem>
             <SelectItem value="Approved">Approved</SelectItem>
-            <SelectItem value="Scheduled">Scheduled</SelectItem>
             <SelectItem value="In Progress">In Progress</SelectItem>
             <SelectItem value="Completed">Completed</SelectItem>
-            <SelectItem value="Verified">Verified</SelectItem>
           </SelectContent>
         </Select>
 
@@ -181,7 +197,7 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {item.faults.map((fault, idx) => (
+                      {[...new Set(item.faults)].map((fault, idx) => (
                         <Badge key={idx} variant="outline" className="text-xs">
                           {fault}
                         </Badge>
@@ -190,9 +206,9 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t">
                       <div className="flex items-center gap-2 text-sm">
-                        <DollarSign className="h-4 w-4 text-gray-600" />
+                        {/* <span className="text-gray-600" >RM</span> */}
                         <span className="text-gray-600">Cost:</span>
-                        <span className="font-medium">${item.estimatedCost.toLocaleString()}</span>
+                        <span className="font-medium">RM{item.estimatedCost.toLocaleString()}</span>
                       </div>
                       
                       {item.scheduledDate && (
@@ -223,14 +239,14 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
                       {/* Status Update Buttons */}
                       {onUpdateStatus && item.status !== 'Completed' && item.status !== 'Verified' && (
                         <>
-                          {(item.status === 'Pending Approval' || item.status === 'Approved' || item.status === 'Scheduled') && (
+                          {(item.status === 'Pending' || item.status === 'Approved' || item.status === 'Scheduled') && (
                             <Button
                               variant="default"
                               size="sm"
                               onClick={() => handleStatusUpdate(item.id, 'In Progress')}
                               className="gap-2"
                             >
-                              <Play className="h-4 w-4" />
+                              <CheckCircle className="h-4 w-4" />
                               Mark as In Progress
                             </Button>
                           )}
