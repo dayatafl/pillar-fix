@@ -5,6 +5,7 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Button } from '@/app/components/ui/button';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
+import logo from './logo/FINAL.svg'
 
 export function Login({ onLogin }) {
   const [emailOrUsername, setEmailOrUsername] = useState('');
@@ -99,11 +100,16 @@ export function Login({ onLogin }) {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 flex flex-col items-center">
-          <div className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl shadow-lg mb-4">
-            <Zap className="h-10 w-10 text-white" />
+          <div className="flex items-center justify-center mb-2">
+            <img src={logo} className='w-12'/>
           </div>
-          <CardTitle className="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
-            PillarFix
+          <CardTitle className = "text-3xl font-bold text-center">
+          <span className="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+            Pillar
+            </span>
+            <span className = "text-red-500">
+            Fix
+            </span>
           </CardTitle>
           <CardDescription className="text-center">
             Intelligent Feeder Pillar Maintenance System
