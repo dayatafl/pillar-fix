@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { TrendingUp, DollarSign, MapPin, AlertTriangle } from 'lucide-react';
+import { TrendingUp, Banknote, MapPin, AlertTriangle, PiggyBank, HandCoins } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import {
   LineChart,
@@ -25,15 +25,12 @@ export function Analytics({ maintenanceItems }) {
 
   // Cost forecasting data
   const costData = [
-    { month: 'Jan', actual: 45000, predicted: 42000, preventive: 35000 },
-    { month: 'Feb', actual: 52000, predicted: 48000, preventive: 38000 },
-    { month: 'Mar', actual: 48000, predicted: 50000, preventive: 36000 },
-    { month: 'Apr', actual: 61000, predicted: 55000, preventive: 40000 },
-    { month: 'May', actual: 55000, predicted: 58000, preventive: 42000 },
-    { month: 'Jun', actual: 67000, predicted: 62000, preventive: 45000 },
-    { month: 'Jul', actual: 0, predicted: 65000, preventive: 47000 },
-    { month: 'Aug', actual: 0, predicted: 68000, preventive: 48000 },
-    { month: 'Sep', actual: 0, predicted: 70000, preventive: 50000 },
+    { year: '2020', actual: 45000, predicted: 42000, preventive: 35000 },
+    { year: '2021', actual: 45000, predicted: 42000, preventive: 35000 },
+    { year: '2022', actual: 52000, predicted: 48000, preventive: 38000 },
+    { year: '2023', actual: 48000, predicted: 50000, preventive: 36000 },
+    { year: '2024', actual: 61000, predicted: 55000, preventive: 40000 },
+    { year: '2025', actual: 55000, predicted: 58000, preventive: 42000 },
   ];
 
   // Severity distribution
@@ -136,7 +133,7 @@ export function Analytics({ maintenanceItems }) {
           <h3 style="font-weight: bold; margin-bottom: 8px;">${area.locality}</h3>
           <p style="font-size: 12px; margin: 4px 0;">Total Issues: ${area.issueCount}</p>
           <p style="font-size: 12px; margin: 4px 0;">Critical: ${area.criticalCount}</p>
-          <p style="font-size: 12px; margin: 4px 0;">Avg Cost: $${area.averageCost.toLocaleString()}</p>
+          <p style="font-size: 12px; margin: 4px 0;">Avg Cost: RM ${area.averageCost.toLocaleString()}</p>
         </div>
       `);
     });
@@ -157,15 +154,17 @@ export function Analytics({ maintenanceItems }) {
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
               Total Maintenance Cost
             </CardTitle>
-            <DollarSign className="h-5 w-5 text-blue-600" />
+            {/* Replaced RM span with Banknote icon */}
+            <Banknote className="h-5 w-5 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">${totalCost.toLocaleString()}</div>
+            <div className="text-3xl font-bold">RM {totalCost.toLocaleString()}</div>
             <p className="text-xs text-gray-500 mt-1">Year to date</p>
           </CardContent>
         </Card>
@@ -175,10 +174,10 @@ export function Analytics({ maintenanceItems }) {
             <CardTitle className="text-sm font-medium text-gray-600">
               Average Cost per Issue
             </CardTitle>
-            <TrendingUp className="h-5 w-5 text-green-600" />
+            <TrendingUp className="h-5 w-5 text-orange-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">${Math.round(avgCost).toLocaleString()}</div>
+            <div className="text-3xl font-bold">RM {Math.round(avgCost).toLocaleString()}</div>
             <p className="text-xs text-gray-500 mt-1">Per maintenance item</p>
           </CardContent>
         </Card>
@@ -188,11 +187,11 @@ export function Analytics({ maintenanceItems }) {
             <CardTitle className="text-sm font-medium text-gray-600">
               Potential Savings
             </CardTitle>
-            <DollarSign className="h-5 w-5 text-green-600" />
+            <HandCoins className="h-5 w-5 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-green-600">
-              ${potentialSavings.toLocaleString()}
+              RM {potentialSavings.toLocaleString()}
             </div>
             <p className="text-xs text-gray-500 mt-1">With preventive maintenance</p>
           </CardContent>
@@ -221,10 +220,10 @@ export function Analytics({ maintenanceItems }) {
           <ResponsiveContainer width="100%" height={400}>
             <LineChart data={costData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
+              <XAxis dataKey="year" />
               <YAxis />
               <Tooltip
-                formatter={(value) => `$${value.toLocaleString()}`}
+                formatter={(value) => `RM ${value.toLocaleString()}`}
               />
               <Legend />
               <Line type="monotone" dataKey="actual" stroke="#3B82F6" strokeWidth={2} name="Actual Cost" />
@@ -234,7 +233,7 @@ export function Analytics({ maintenanceItems }) {
           </ResponsiveContainer>
           <div className="mt-4 p-4 bg-green-50 rounded-lg">
             <p className="text-sm text-green-900">
-              <strong>Insight:</strong> Implementing preventive maintenance could reduce costs by ${potentialSavings.toLocaleString()} per month. 
+              <strong>Insight:</strong> Implementing preventive maintenance could reduce costs by RM {potentialSavings.toLocaleString()} per year. 
               The AI detection system helps identify issues early, reducing expensive reactive repairs.
             </p>
           </div>
@@ -255,8 +254,8 @@ export function Analytics({ maintenanceItems }) {
                   data={severityData}
                   cx="50%"
                   cy="50%"
+                  label={({ name, value }) => (value > 0 ? `${name}: ${value}` : null)}
                   labelLine={false}
-                  label={({ name, value }) => `${name}: ${value}`}
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
@@ -323,7 +322,7 @@ export function Analytics({ maintenanceItems }) {
                 </div>
                 <div className="mt-3 space-y-1 text-xs text-gray-600">
                   <p>Critical: {area.criticalCount}</p>
-                  <p>Avg Cost: RM ${area.averageCost.toLocaleString()}</p>
+                  <p>Avg Cost: RM {area.averageCost.toLocaleString()}</p>
                 </div>
               </div>
             ))}
@@ -333,3 +332,4 @@ export function Analytics({ maintenanceItems }) {
     </div>
   );
 }
+
