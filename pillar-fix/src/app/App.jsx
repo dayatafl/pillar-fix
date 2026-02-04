@@ -163,11 +163,19 @@ export default function App() {
     if (submission) {
       const maintenanceItem = createMockMaintenanceItem(submission, approvalData);
       setMaintenanceItems(prev => [maintenanceItem, ...prev]);
+      // Update submission validation status
+      setSubmissions(prev => prev.map(s =>
+        s.id === submissionId ? { ...s, validationStatus: 'Approved' } : s
+      ));
     }
     setCurrentView('maintenance-list');
   };
 
   const handleRejectSubmission = (submissionId, reason) => {
+    // Update submission validation status
+    setSubmissions(prev => prev.map(s =>
+      s.id === submissionId ? { ...s, validationStatus: 'Rejected' } : s
+    ));
     toast.info('Submission rejected');
     setCurrentView('supervisor-validation');
   };
