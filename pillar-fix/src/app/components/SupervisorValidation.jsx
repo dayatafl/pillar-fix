@@ -82,11 +82,25 @@ export function SupervisorValidation({ submissions, onReview }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">
+            <div className="text-2xl font-bold">
               {submissions.filter(s => s.overallRisk === 'Critical' || s.overallRisk === 'High').length}
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <div className = "flex items-center justify-between">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              Pending
+            </CardTitle>
+            <Clock className="h-5 w-5 text-yellow-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{pendingReview.length}</div>
+          </CardContent>
+        </Card>        
 
         <Card>
           <CardHeader className="pb-2">
@@ -98,7 +112,7 @@ export function SupervisorValidation({ submissions, onReview }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">
+            <div className="text-2xl font-bold">
               {submissions.filter(s => (s.validationStatus || 'Pending') === 'Approved').length}
             </div>
           </CardContent>
@@ -114,23 +128,9 @@ export function SupervisorValidation({ submissions, onReview }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">
+            <div className="text-2xl font-bold">
               {submissions.filter(s => (s.validationStatus || 'Pending') === 'Rejected').length}
             </div>
-          </CardContent>
-        </Card>        
-
-        <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Pending
-            </CardTitle>
-            <Clock className="h-5 w-5 text-yellow-500" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{pendingReview.length}</div>
           </CardContent>
         </Card>        
 
@@ -144,7 +144,7 @@ export function SupervisorValidation({ submissions, onReview }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">
+            <div className="text-2xl font-bold">
               {submissions.filter(s => s.overallRisk).length}
             </div>
           </CardContent>

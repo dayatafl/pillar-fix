@@ -164,7 +164,7 @@ export function Analytics({ maintenanceItems }) {
             <Banknote className="h-5 w-5 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">RM {totalCost.toLocaleString()}</div>
+            <div className="text-2xl font-bold">RM {totalCost.toLocaleString()}</div>
             <p className="text-xs text-gray-500 mt-1">Year to date</p>
           </CardContent>
         </Card>
@@ -177,7 +177,7 @@ export function Analytics({ maintenanceItems }) {
             <TrendingUp className="h-5 w-5 text-orange-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">RM {Math.round(avgCost).toLocaleString()}</div>
+            <div className="text-2xl font-bold">RM {Math.round(avgCost).toLocaleString()}</div>
             <p className="text-xs text-gray-500 mt-1">Per maintenance item</p>
           </CardContent>
         </Card>
@@ -190,7 +190,7 @@ export function Analytics({ maintenanceItems }) {
             <HandCoins className="h-5 w-5 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">
+            <div className="text-2xl font-bold text-green-600">
               RM {potentialSavings.toLocaleString()}
             </div>
             <p className="text-xs text-gray-500 mt-1">With preventive maintenance</p>
@@ -205,7 +205,7 @@ export function Analytics({ maintenanceItems }) {
             <MapPin className="h-5 w-5 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{hotspotAreas.length}</div>
+            <div className="text-2xl font-bold">{hotspotAreas.length}</div>
             <p className="text-xs text-gray-500 mt-1">High-activity zones</p>
           </CardContent>
         </Card>

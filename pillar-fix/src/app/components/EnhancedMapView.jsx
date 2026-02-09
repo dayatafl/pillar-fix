@@ -243,7 +243,7 @@ export function EnhancedMapView({
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Pillars</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-600 text-gray-600">Total Pillars</CardTitle>
             <MapPin className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
@@ -253,7 +253,7 @@ export function EnhancedMapView({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Repaired</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-600">Repaired</CardTitle>
             <div className="h-4 w-4 rounded-full bg-green-500"></div>
           </CardHeader>
           <CardContent>
@@ -265,7 +265,7 @@ export function EnhancedMapView({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-600">In Progress</CardTitle>
             <div className="h-4 w-4 rounded-full bg-yellow-500"></div>
           </CardHeader>
           <CardContent>
@@ -277,7 +277,7 @@ export function EnhancedMapView({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Not Examined</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-600">Not Examined</CardTitle>
             <div className="h-4 w-4 rounded-full bg-red-500"></div>
           </CardHeader>
           <CardContent>
