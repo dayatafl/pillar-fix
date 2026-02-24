@@ -13,9 +13,6 @@ import {
 
 export function SupervisorValidation({ submissions, onReview }) {
   const [statusFilter, setStatusFilter] = useState('all');
-  const pendingReview = submissions.filter(
-    s => s.detectionStatus === 'Completed' && !s.overallRisk
-  );
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString('en-MY', {
@@ -26,6 +23,15 @@ export function SupervisorValidation({ submissions, onReview }) {
     });
   };
 
+  // Single source of truth for a submission's validation status.
+  // 'Approved' and 'Rejected' are set explicitly by the supervisor via app.jsx.
+  // Everything else that has reached this page is 'Pending'.
+  const getValidationStatus = (submission) => {
+    if (submission.validationStatus === 'Approved') return 'Approved';
+    if (submission.validationStatus === 'Rejected') return 'Rejected';
+    return 'Pending';
+  };
+
   const getRiskBadge = (risk) => {
     const colors = {
       Critical: 'bg-red-100 text-red-700',
@@ -33,33 +39,45 @@ export function SupervisorValidation({ submissions, onReview }) {
       Medium: 'bg-yellow-100 text-yellow-700',
       Low: 'bg-blue-100 text-blue-700',
     };
-
-    return (
-      <Badge className={colors[risk]}>
-        {risk}
-      </Badge>
-    );
+    return <Badge className={colors[risk]}>{risk}</Badge>;
   };
 
   const getValidationBadge = (status) => {
-    const colors = {
-      Pending: 'bg-yellow-100 text-yellow-700',
-      Rejected: 'bg-red-100 text-red-700',
+    const styles = {
+      Pending:  'bg-yellow-100 text-yellow-700',
       Approved: 'bg-green-100 text-green-700',
+      Rejected: 'bg-red-100 text-red-700',
     };
-
-    return (
-      <Badge className={colors[status] || colors.Pending}>
-        {status || 'Pending'}
-      </Badge>
-    );
+    return <Badge className={styles[status]}>{status}</Badge>;
   };
 
-  // Filter submissions based on validation status
+  // ── Dashboard counts ────────────────────────────────────────────────────────
+  const highPriorityCount = submissions.filter(
+    s => s.overallRisk === 'Critical' || s.overallRisk === 'High'
+  ).length;
+
+  const approvedCount = submissions.filter(
+    s => getValidationStatus(s) === 'Approved'
+  ).length;
+
+  const rejectedCount = submissions.filter(
+    s => getValidationStatus(s) === 'Rejected'
+  ).length;
+
+  // Pending Review: sent to supervisor but not yet acted on
+  const pendingReviewCount = submissions.filter(
+    s => getValidationStatus(s) === 'Pending'
+  ).length;
+
+  // Total Reviewed: supervisor has made a decision (Approved OR Rejected)
+  const totalReviewedCount = submissions.filter(
+    s => getValidationStatus(s) === 'Approved' || getValidationStatus(s) === 'Rejected'
+  ).length;
+
+  // ── Submissions list ────────────────────────────────────────────────────────
   const filteredSubmissions = submissions.filter(submission => {
     if (statusFilter === 'all') return true;
-    const status = submission.validationStatus || 'Pending';
-    return status === statusFilter;
+    return getValidationStatus(submission) === statusFilter;
   });
 
   return (
@@ -132,7 +150,7 @@ export function SupervisorValidation({ submissions, onReview }) {
               {submissions.filter(s => (s.validationStatus || 'Pending') === 'Rejected').length}
             </div>
           </CardContent>
-        </Card>        
+        </Card>
 
         <Card>
           <CardHeader className="pb-2">
@@ -148,7 +166,7 @@ export function SupervisorValidation({ submissions, onReview }) {
               {submissions.filter(s => s.overallRisk).length}
             </div>
           </CardContent>
-        </Card>     
+        </Card>
       </div>
 
       <div className="flex items-center justify-between">
@@ -172,16 +190,20 @@ export function SupervisorValidation({ submissions, onReview }) {
           <div className="py-4 space-y-3">
             {filteredSubmissions.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
-                {submissions.length === 0 
+                {submissions.length === 0
                   ? 'No submissions pending review'
-                  : `No submissions with ${statusFilter === 'all' ? 'any' : statusFilter} status`
-                }
+                  : `No submissions with "${statusFilter}" status`}
               </div>
             ) : (
               filteredSubmissions.map((submission) => {
-                const faultCount = submission.detectionResults?.reduce(
-                  (sum, r) => sum + r.boundingBoxes.length, 0
-                ) || 0;
+                const faultCount =
+                  submission.detectionResults?.reduce(
+                    (sum, r) => sum + r.boundingBoxes.length,
+                    0
+                  ) || 0;
+
+                const validationStatus = getValidationStatus(submission);
+                const isValidated = validationStatus === 'Approved' || validationStatus === 'Rejected';
 
                 return (
                   <div
@@ -200,32 +222,29 @@ export function SupervisorValidation({ submissions, onReview }) {
                           </div>
                         ))}
                       </div>
-                      
+
                       <div className="flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="font-semibold">{submission.pillarId}</h4>
                           {submission.overallRisk && getRiskBadge(submission.overallRisk)}
-                          {getValidationBadge(submission.validationStatus)}
-                          {faultCount > 0 && (
-                            <Badge variant="outline">
-                              {faultCount} fault{faultCount !== 1 ? 's' : ''}
-                            </Badge>
-                          )}
+                          {getValidationBadge(validationStatus)}
+
                         </div>
                         <p className="text-sm text-gray-600">{submission.address}</p>
                         <p className="text-xs text-gray-500 mt-1">
-                          Submitted: {formatDate(submission.submittedAt)} • {submission.submittedBy}
+                          Submitted: {formatDate(submission.submittedAt)} •{' '}
+                          {submission.submittedBy}
                         </p>
                       </div>
                     </div>
 
                     <Button
-                      variant="outline"
+                      variant={isValidated ? 'secondary' : 'outline'}
                       size="sm"
                       onClick={() => onReview(submission.id)}
                     >
                       <Eye className="h-4 w-4 mr-2" />
-                      Review
+                      {isValidated ? 'View' : 'Review'}
                     </Button>
                   </div>
                 );

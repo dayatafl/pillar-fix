@@ -147,10 +147,14 @@ export default function App() {
   };
 
   const handleSendToSupervisor = (submissionId) => {
-    toast.success('Detection sent to supervisor for validation');
-    // Go back to audit tasks dashboard
-    setCurrentView('tech-dashboard');
-  };
+  setSubmissions(prev => prev.map(s =>
+    s.id === submissionId
+      ? { ...s, sentToSupervisor: true }
+      : s
+  ));
+  toast.success('Detection sent to supervisor for validation');
+  setCurrentView('tech-dashboard');
+};
 
   const handleReviewSubmission = (submissionId) => {
     setSelectedSubmissionId(submissionId);
@@ -159,25 +163,27 @@ export default function App() {
   };
 
   const handleApproveForMaintenance = (submissionId, approvalData) => {
-    const submission = submissions.find(s => s.id === submissionId);
-    if (submission) {
-      const maintenanceItem = createMockMaintenanceItem(submission, approvalData);
-      setMaintenanceItems(prev => [maintenanceItem, ...prev]);
-      // Update submission validation status
-      setSubmissions(prev => prev.map(s =>
-        s.id === submissionId ? { ...s, validationStatus: 'Approved' } : s
-      ));
-    }
-    setCurrentView('maintenance-list');
+  const submission = submissions.find(s => s.id === submissionId);
+  if (submission) {
+  const maintenanceItem = createMockMaintenanceItem(submission, approvalData);
+  setMaintenanceItems(prev => [maintenanceItem, ...prev]);
+  setSubmissions(prev => prev.map(s =>
+  s.id === submissionId
+  ? { ...s, validated: true, validationStatus: 'Approved' }
+  : s
+  ));
+  }
+  setCurrentView('supervisor-validation');  // ← go back to Validation, not Maintenance
   };
 
   const handleRejectSubmission = (submissionId, reason) => {
-    // Update submission validation status
-    setSubmissions(prev => prev.map(s =>
-      s.id === submissionId ? { ...s, validationStatus: 'Rejected' } : s
-    ));
-    toast.info('Submission rejected');
-    setCurrentView('supervisor-validation');
+  setSubmissions(prev => prev.map(s =>
+  s.id === submissionId
+  ? { ...s, validated: true, validationStatus: 'Rejected', rejectionReason: reason }
+  : s
+  ));
+  toast.info('Submission rejected');
+  setCurrentView('supervisor-validation');
   };
 
   const handleViewMaintenanceDetail = (itemId) => {
@@ -396,10 +402,11 @@ export default function App() {
 
         {currentView === 'supervisor-validation' && (
           <SupervisorValidation
-            submissions={submissions.filter(s => s.detectionStatus === 'Completed')}
+            submissions={submissions.filter(s => 
+              s.detectionStatus === 'Completed')}
             onReview={handleReviewSubmission}
-          />
-        )}
+            />
+          )}
 
         {currentView === 'supervisor-review' && selectedSubmission && (
           <SupervisorReview
