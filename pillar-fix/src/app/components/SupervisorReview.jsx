@@ -11,14 +11,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
+import { Badge } from '@/app/components/ui/badge';
 import { toast } from 'sonner';
 
 export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
-  const [severity, setSeverity] = useState('Medium');
-  const [priority, setPriority] = useState('Medium');
-  const [estimatedCost, setEstimatedCost] = useState('5000');
-  const [notes, setNotes] = useState('');
-  const [rejectReason, setRejectReason] = useState('');
+  const isApproved = submission.validationStatus === 'Approved';
+  const isRejected = submission.validationStatus === 'Rejected';
+  const isValidated = isApproved || isRejected;
+
+  // Pre-fill from saved approvalData if already validated, otherwise use defaults
+  const [severity, setSeverity] = useState(submission.approvalData?.severity || 'Medium');
+  const [priority, setPriority] = useState(submission.approvalData?.priority || 'Medium');
+  const [estimatedCost, setEstimatedCost] = useState(
+    submission.approvalData?.estimatedCost?.toString() || '5000'
+  );
+  const [notes, setNotes] = useState(submission.approvalData?.notes || '');
+  const [rejectReason, setRejectReason] = useState(submission.rejectionReason || '');
 
   const allFaults = submission.detectionResults?.flatMap(r =>
     r.boundingBoxes.map(b => b.faultType)
@@ -33,14 +41,12 @@ export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
       toast.error('Please provide supervisor notes');
       return;
     }
-
     onApprove(submission.id, {
       severity,
       priority,
       estimatedCost: parseFloat(estimatedCost),
       notes,
     });
-
     toast.success('Maintenance approved and scheduled');
   };
 
@@ -49,7 +55,6 @@ export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
       toast.error('Please provide a reason for rejection');
       return;
     }
-
     onReject(submission.id, rejectReason);
     toast.success('Submission rejected');
   };
@@ -65,6 +70,12 @@ export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
           <h2 className="text-3xl font-bold">Supervisor Review</h2>
           <p className="text-gray-600 mt-1">{submission.pillarId}</p>
         </div>
+        {/* Status badge when already validated */}
+        {isValidated && (
+          <Badge className={isApproved ? 'bg-green-600 text-white text-sm px-3 py-1' : 'bg-red-100 text-red-700 text-sm px-3 py-1'}>
+            {isApproved ? '✓ Approved' : '✗ Rejected'}
+          </Badge>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -119,7 +130,6 @@ export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
 
                 {submission.detectionResults?.map((result) => {
                   if (result.boundingBoxes.length === 0) return null;
-                  
                   return (
                     <Card key={result.side} className="border-orange-200">
                       <CardHeader className="pb-3">
@@ -151,98 +161,120 @@ export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
           </Card>
         </div>
 
-        {/* Review Actions */}
+        {/* Review Actions Sidebar */}
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Maintenance Assessment</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="severity">Severity Level</Label>
-                <Select value={severity} onValueChange={(v) => setSeverity(v)}>
-                  <SelectTrigger id="severity">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Low">Low</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="High">High</SelectItem>
-                    <SelectItem value="Critical">Critical</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
 
-              <div>
-                <Label htmlFor="priority">Priority</Label>
-                <Select value={priority} onValueChange={setPriority}>
-                  <SelectTrigger id="priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Low">Low</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="High">High</SelectItem>
-                    <SelectItem value="Urgent">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          {/* Show Maintenance Assessment only if pending OR approved */}
+          {(isApproved || !isValidated) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Maintenance Assessment</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="severity">Severity Level</Label>
+                  <Select value={severity} onValueChange={setSeverity} disabled={isValidated}>
+                    <SelectTrigger id="severity" className={isValidated ? 'opacity-60 cursor-not-allowed' : ''}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Low">Low</SelectItem>
+                      <SelectItem value="Medium">Medium</SelectItem>
+                      <SelectItem value="High">High</SelectItem>
+                      <SelectItem value="Critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <Label htmlFor="cost">Estimated Cost (RM)</Label>
-                <input
-                  id="cost"
-                  type="number"
-                  value={estimatedCost}
-                  onChange={(e) => setEstimatedCost(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-input bg-input-background px-3 py-2 text-sm"
-                />
-              </div>
+                <div>
+                  <Label htmlFor="priority">Priority</Label>
+                  <Select value={priority} onValueChange={setPriority} disabled={isValidated}>
+                    <SelectTrigger id="priority" className={isValidated ? 'opacity-60 cursor-not-allowed' : ''}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Low">Low</SelectItem>
+                      <SelectItem value="Medium">Medium</SelectItem>
+                      <SelectItem value="High">High</SelectItem>
+                      <SelectItem value="Urgent">Urgent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <Label htmlFor="notes">Supervisor Notes</Label>
-                <Textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Enter assessment notes and recommendations..."
-                  rows={4}
-                />
-              </div>
+                <div>
+                  <Label htmlFor="cost">Estimated Cost (RM)</Label>
+                  <input
+                    id="cost"
+                    type="number"
+                    value={estimatedCost}
+                    onChange={(e) => setEstimatedCost(e.target.value)}
+                    disabled={isValidated}
+                    className={`flex h-10 w-full rounded-md border border-input bg-input-background px-3 py-2 text-sm ${isValidated ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  />
+                </div>
 
-              <Button onClick={handleApprove} className="w-full bg-green-600" size="lg">
-                <CheckCircle className="h-5 w-5 mr-2" />
-                Approve Maintenance
-              </Button>
-            </CardContent>
-          </Card>
+                <div>
+                  <Label htmlFor="notes">Supervisor Notes</Label>
+                  <Textarea
+                    id="notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Enter assessment notes and recommendations..."
+                    rows={4}
+                    disabled={isValidated}
+                    className={isValidated ? 'opacity-60 cursor-not-allowed' : ''}
+                  />
+                </div>
 
-          <Card className="border-red-200">
-            <CardHeader>
-              <CardTitle className="text-red-900">Reject Submission</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="reject">Reason for Rejection</Label>
-                <Textarea
-                  id="reject"
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="Enter reason for rejection..."
-                  rows={3}
-                />
-              </div>
+                {/* Only show Approve button if not yet validated */}
+                {!isValidated && (
+                  <Button onClick={handleApprove} className="w-full bg-green-600" size="lg">
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                    Approve Maintenance
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-              <Button 
-                onClick={handleReject} 
-                variant="destructive" 
-                className="w-full"
-              >
-                <XCircle className="h-5 w-5 mr-2" />
-                Reject Maintenance
-              </Button>
-            </CardContent>
-          </Card>
+          {/* Show Reject section only if pending OR rejected */}
+          {(isRejected || !isValidated) && (
+            <Card className={isRejected ? 'border-red-300' : 'border-red-200'}>
+              <CardHeader>
+                <CardTitle className="text-red-900">
+                  {isRejected ? 'Rejection Reason' : 'Reject Submission'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="reject">
+                    {isRejected ? 'Reason Given' : 'Reason for Rejection'}
+                  </Label>
+                  <Textarea
+                    id="reject"
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Enter reason for rejection..."
+                    rows={3}
+                    disabled={isValidated}
+                    className={isValidated ? 'opacity-60 cursor-not-allowed' : ''}
+                  />
+                </div>
+
+                {/* Only show Reject button if not yet validated */}
+                {!isValidated && (
+                  <Button
+                    onClick={handleReject}
+                    variant="destructive"
+                    className="w-full"
+                  >
+                    <XCircle className="h-5 w-5 mr-2" />
+                    Reject Maintenance
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
