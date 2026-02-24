@@ -28,7 +28,7 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
 
   const stats = {
     total: items.length,
-    pending: items.filter(i => i.status === 'Pending').length,
+    pending: items.filter(i => i.status === 'Pending' || i.status === 'Approved').length,
     inProgress: items.filter(i => i.status === 'In Progress').length,
     completed: items.filter(i => i.status === 'Completed').length,
     totalCost: items.reduce((sum, i) => sum + i.estimatedCost, 0),
@@ -92,7 +92,7 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.total}</div>
+            <div className="text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
         <Card>
@@ -103,7 +103,7 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.pending}</div>
+            <div className="text-2xl font-bold">{stats.pending}</div>
           </CardContent>
         </Card>
         <Card>
@@ -114,7 +114,7 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.inProgress}</div>
+            <div className="text-2xl font-bold">{stats.inProgress}</div>
           </CardContent>
         </Card>
         <Card>
@@ -125,7 +125,7 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.completed}</div>
+            <div className="text-2xl font-bold">{stats.completed}</div>
           </CardContent>
         </Card>
         <Card>

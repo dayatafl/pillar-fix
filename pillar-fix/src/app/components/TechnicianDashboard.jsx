@@ -165,29 +165,25 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
       title: 'Total Tasks',
       value: stats.total,
       icon: MapPin,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50',
+      color: 'text-blue-500',
     },
     {
       title: 'Pending',
       value: stats.pending,
       icon: Clock,
-      color: 'text-yellow-600',
-      bgColor: 'bg-yellow-50',
+      color: 'text-yellow-500',
     },
     {
       title: 'In Progress',
       value: stats.inProgress,
       icon: AlertCircle,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50',
+      color: 'text-orange-500',
     },
     {
       title: 'Completed',
       value: stats.completed,
       icon: CheckCircle,
-      color: 'text-green-600',
-      bgColor: 'bg-green-50',
+      color: 'text-green-500',
     },
   ];
 
@@ -204,19 +200,21 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat, index) => (
           <Card key={index}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="pb-2">
+              <div className='flex items-center justify-between'>
               <CardTitle className="text-sm font-medium text-gray-600">
                 {stat.title}
               </CardTitle>
-              <div className={`p-2 rounded-lg ${stat.bgColor}`}>
+              <div className={`rounded-lg ${stat.bgColor}`}>
                 <stat.icon className={`h-5 w-5 ${stat.color}`} />
+              </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{stat.value}</div>
+              <div className="text-2xl font-bold">{stat.value}</div>
             </CardContent>
           </Card>
         ))}
@@ -255,7 +253,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
             </div>
           </div>
           {isCalendarFilterOpen && (
-            <div className="absolute z-50 mt-2">
+            <div className="absolute z-50 mt-12">
               <div className="border rounded-lg p-2 bg-gray-50">
                 <Calendar
                   mode="single"

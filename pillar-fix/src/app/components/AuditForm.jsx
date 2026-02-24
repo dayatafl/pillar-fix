@@ -164,6 +164,7 @@ export function AuditForm({ task, onBack, onSubmit }) {
                       id={side}
                       type="file"
                       accept="image/*"
+                      capture="environment"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) handleImageSelect(side, file);

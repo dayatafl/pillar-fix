@@ -409,7 +409,7 @@ export function MaintenanceDetail({ item, onBack, onUpdateWorkLog, onSubmitCompl
 
               <div>
                 <Label className="text-gray-600">Estimated Cost</Label>
-                <p className="font-medium text-lg">${item.estimatedCost.toLocaleString()}</p>
+                <p className="font-medium text-lg">RM{item.estimatedCost.toLocaleString()}</p>
               </div>
 
               {item.scheduledDate && (
