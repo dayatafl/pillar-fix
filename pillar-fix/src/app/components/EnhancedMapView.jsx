@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/app/components/ui/select";
 import { Button } from "./ui/button";
-import { Search, MapPin, Filter } from "lucide-react";
+import { Search, MapPin, Filter, Info } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
 export function EnhancedMapView({
@@ -28,11 +28,13 @@ export function EnhancedMapView({
   const mapRef = useRef(null);
   const mapContainerRef = useRef(null);
   const markersRef = useRef([]);
+  const selectedMarkerRef = useRef(null); // NEW REF
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedPillar, setSelectedPillar] = useState(null);
-  const [hasMaintenanceRecord, setHasMaintenanceRecord] = useState(false); // NEW STATE
+  const [hasMaintenanceRecord, setHasMaintenanceRecord] = useState(false);
+  const [isHovered, setIsHovered] = useState(false); // NEW STATE
 
   // Convert audit tasks to pillar map data with correct status logic
   const getPillarStatus = (task) => {
@@ -95,7 +97,7 @@ export function EnhancedMapView({
     return matchesSearch && matchesStatus;
   });
 
-  // NEW useEffect to check for maintenance record
+  // useEffect to check for maintenance record
   useEffect(() => {
     if (selectedPillar) {
       const itemExists = maintenanceItems.some(
@@ -106,6 +108,33 @@ export function EnhancedMapView({
       setHasMaintenanceRecord(false);
     }
   }, [selectedPillar, maintenanceItems]); // Re-run when selectedPillar or maintenanceItems change
+
+  // NEW Helper function
+  const createMarkerIcon = (color, isSelected = false) => {
+    return L.divIcon({
+      className: "custom-marker",
+      html: `
+        <div style="
+          background-color: ${color};
+          width: ${isSelected ? "36px" : "24px"};
+          height: ${isSelected ? "36px" : "24px"};
+          border-radius: 50%;
+          border: ${isSelected ? "5px" : "3px"} solid white;
+          box-shadow: ${
+            isSelected
+              ? `0 4px 16px rgba(0,0,0,0.4),
+                0 0 0 10px ${color}60,
+                0 0 50px ${color}`
+              : `0 2px 8px rgba(0,0,0,0.3)`
+          };
+          cursor: pointer;
+          transition: scale(${isSelected ? "1" : "1"});
+        "></div>
+      `,
+      iconSize: [isSelected ? 36 : 24, isSelected ? 36 : 24],
+      iconAnchor: [isSelected ? 18 : 12, isSelected ? 18 : 12],
+    });
+  };
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -135,6 +164,7 @@ export function EnhancedMapView({
     // Clear existing markers
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
+    selectedMarkerRef.current = null; // NEW Reset selected marker
 
     // Add markers for filtered pillars
     filteredPillars.forEach((pillar) => {
@@ -145,22 +175,24 @@ export function EnhancedMapView({
             ? "#eab308" // yellow
             : "#ef4444"; // red
 
-      const icon = L.divIcon({
-        className: "custom-marker",
-        html: `
-          <div style="
-            background-color: ${color};
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            border: 3px solid white;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            cursor: pointer;
-          "></div>
-        `,
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-      });
+      // const icon = L.divIcon({
+      //   className: "custom-marker",
+      //   html: `
+      //     <div style="
+      //       background-color: ${color};
+      //       width: 24px;
+      //       height: 24px;
+      //       border-radius: 50%;
+      //       border: 3px solid white;
+      //       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      //       cursor: pointer;
+      //     "></div>
+      //   `,
+      //   iconSize: [24, 24],
+      //   iconAnchor: [12, 12],
+      // });
+
+      const icon = createMarkerIcon(color, false); // NEW line
 
       const marker = L.marker(
         [pillar.coordinates.lat, pillar.coordinates.lng],
@@ -168,10 +200,24 @@ export function EnhancedMapView({
       )
         .addTo(mapRef.current)
         .on("click", () => {
+          // NEW added lines
+          if (selectedMarkerRef.current) {
+            const prevColor =
+              selectedMarkerRef.current.pillar.status === "repaired"
+                ? "#22c55e"
+                : selectedMarkerRef.current.pillar.status === "in-progress"
+                  ? "#eab308"
+                  : "#ef4444";
+            selectedMarkerRef.current.marker.setIcon(
+              createMarkerIcon(prevColor, false),
+            );
+          }
+
+          // Highlight current marker (NEW)
+          marker.setIcon(createMarkerIcon(color, true));
+          selectedMarkerRef.current = { marker, pillar };
+
           setSelectedPillar(pillar);
-          // if (onPillarSelect) {
-          //   onPillarSelect(pillar.pillarId);
-          // }
         });
 
       // Add popup
@@ -203,7 +249,7 @@ export function EnhancedMapView({
       );
       mapRef.current.fitBounds(bounds, { padding: [50, 50] });
     }
-  }, [filteredPillars, onPillarSelect]); //nanti nak cuba remove
+  }, [filteredPillars]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -243,8 +289,8 @@ export function EnhancedMapView({
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 text-gray-600">Total Pillars</CardTitle>
-            <MapPin className="h-4 w-4 text-blue-600" />
+            <CardTitle className="text-sm font-medium">Total Pillars</CardTitle>
+            <MapPin className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pillars.length}</div>
@@ -253,7 +299,7 @@ export function EnhancedMapView({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Repaired</CardTitle>
+            <CardTitle className="text-sm font-medium">Repaired</CardTitle>
             <div className="h-4 w-4 rounded-full bg-green-500"></div>
           </CardHeader>
           <CardContent>
@@ -265,7 +311,7 @@ export function EnhancedMapView({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">In Progress</CardTitle>
+            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
             <div className="h-4 w-4 rounded-full bg-yellow-500"></div>
           </CardHeader>
           <CardContent>
@@ -277,7 +323,7 @@ export function EnhancedMapView({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Not Examined</CardTitle>
+            <CardTitle className="text-sm font-medium">Not Examined</CardTitle>
             <div className="h-4 w-4 rounded-full bg-red-500"></div>
           </CardHeader>
           <CardContent>
@@ -322,6 +368,13 @@ export function EnhancedMapView({
                   <SelectItem value="repaired">Repaired</SelectItem>
                 </SelectContent>
               </Select>
+              <Button
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+                variant="outline"
+              >
+                <Info />
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -334,24 +387,25 @@ export function EnhancedMapView({
               />
             </div>
             <div className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg">
-                <h3 className="font-semibold mb-2">Legend</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full bg-green-500"></div>
-                    <span className="text-sm">Repaired</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full bg-yellow-500"></div>
-                    <span className="text-sm">In Progress / Repairing</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full bg-red-500"></div>
-                    <span className="text-sm">Not Examined</span>
+              {isHovered && (
+                <div className="p-4 bg-muted rounded-lg">
+                  <h3 className="font-semibold mb-2">Legend</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-full bg-green-500"></div>
+                      <span className="text-sm">Repaired</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-full bg-yellow-500"></div>
+                      <span className="text-sm">In Progress / Repairing</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-4 w-4 rounded-full bg-red-500"></div>
+                      <span className="text-sm">Not Examined</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-
+              )}
               {selectedPillar && (
                 <Card>
                   <CardHeader>
