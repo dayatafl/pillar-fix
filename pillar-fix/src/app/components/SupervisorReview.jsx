@@ -13,6 +13,7 @@ import {
 } from '@/app/components/ui/select';
 import { Badge } from '@/app/components/ui/badge';
 import { toast } from 'sonner';
+import api from "@/app/api";
 
 export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
   const isApproved = submission.validationStatus === 'Approved';
@@ -36,27 +37,40 @@ export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
     (sum, r) => sum + r.boundingBoxes.length, 0
   ) || 0;
 
-  const handleApprove = () => {
-    if (!notes.trim()) {
-      toast.error('Please provide supervisor notes');
-      return;
+  const handleApprove = async () => {
+    if (!notes.trim()) { toast.error("Supervisor notes required"); return; }
+    try {
+      await api.put(`/tasks/${submission.taskId}/validate`, {
+        validation_status: "Approved",
+        severity_validation: severity,
+        priority_validation: priority,
+        cost_estimation: parseFloat(estimatedCost),
+        remarks: notes,
+        validation_by: currentUser.employeeId,
+      });
+      onApprove(submission.id, { severity, priority, estimatedCost: parseFloat(estimatedCost), notes });
+      toast.success("Maintenance approved");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Validation failed");
     }
-    onApprove(submission.id, {
-      severity,
-      priority,
-      estimatedCost: parseFloat(estimatedCost),
-      notes,
-    });
-    toast.success('Maintenance approved and scheduled');
   };
 
-  const handleReject = () => {
-    if (!rejectReason.trim()) {
-      toast.error('Please provide a reason for rejection');
-      return;
+  const handleReject = async () => {
+    if (!rejectReason.trim()) { toast.error("Rejection reason required"); return; }
+    try {
+      await api.put(`/tasks/${submission.taskId}/validate`, {
+        validation_status: "Rejected",
+        severity_validation: severity,
+        priority_validation: priority,
+        cost_estimation: 0,
+        remarks: rejectReason,
+        validation_by: currentUser.employeeId,
+      });
+      onReject(submission.id, rejectReason);
+      toast.success("Submission rejected");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Rejection failed");
     }
-    onReject(submission.id, rejectReason);
-    toast.success('Submission rejected');
   };
 
   return (

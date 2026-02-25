@@ -14,9 +14,9 @@ import { Analytics } from '@/app/components/Analytics';
 import { Login } from '@/app/components/Login';
 import { UserManagement } from '@/app/components/UserManagement';
 import { EnhancedMapView } from '@/app/components/EnhancedMapView';
-import { mockAuditTasks, simulateAIDetection, createMockMaintenanceItem, mockUsers } from '@/app/mockData';
 import { toast } from 'sonner';
 import logo from './components/logo/FINAL.svg'
+import api from "@/app/api";
 
 export default function App() {
   // Auth state
@@ -28,58 +28,22 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Data management
-  const [auditTasks, setAuditTasks] = useState(mockAuditTasks);
+  const [auditTasks, setAuditTasks] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [maintenanceItems, setMaintenanceItems] = useState([]);
-  const [users, setUsers] = useState(mockUsers);
+  const [users, setUsers] = useState([]);
   
   // Selected items
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [selectedMaintenanceId, setSelectedMaintenanceId] = useState(null);
 
-  // Simulate AI processing queue
   useEffect(() => {
     if (!isAuthenticated) return;
-
-    const interval = setInterval(() => {
-      setSubmissions(prev => {
-        const queued = prev.filter(s => s.detectionStatus === 'Queued');
-        if (queued.length > 0) {
-          const toProcess = queued[0];
-          setTimeout(() => {
-            setSubmissions(p => p.map(s => 
-              s.id === toProcess.id 
-                ? { ...s, detectionStatus: 'Processing' }
-                : s
-            ));
-            
-            setTimeout(() => {
-              const results = simulateAIDetection(toProcess);
-              const overallRisk = results.some(r => r.boundingBoxes.some(b => b.faultType === 'Exposed Wiring' || b.faultType === 'Physical Damage')) 
-                ? 'Critical'
-                : results.some(r => r.boundingBoxes.length > 2)
-                ? 'High'
-                : results.some(r => r.boundingBoxes.length > 0)
-                ? 'Medium'
-                : 'Low';
-
-              setSubmissions(p => p.map(s =>
-                s.id === toProcess.id
-                  ? { ...s, detectionStatus: 'Completed', detectionResults: results, overallRisk }
-                  : s
-              ));
-              
-              toast.success(`AI detection completed for ${toProcess.pillarId}`);
-            }, 3000);
-          }, 1000);
-        }
-        return prev;
-      });
-    }, 5000);
-
-    return () => clearInterval(interval);
+    api.get("/tasks").then(({ data }) => setAuditTasks(data)).catch(console.error);
+    api.get("/users").then(({ data }) => setUsers(data)).catch(console.error);
   }, [isAuthenticated]);
+
 
   // Auth handlers
   const handleLogin = (user) => {
@@ -411,6 +375,7 @@ export default function App() {
         {currentView === 'supervisor-review' && selectedSubmission && (
           <SupervisorReview
             submission={selectedSubmission}
+            currentUser={currentUser}
             onBack={() => setCurrentView('supervisor-validation')}
             onApprove={handleApproveForMaintenance}
             onReject={handleRejectSubmission}
@@ -428,6 +393,7 @@ export default function App() {
         {currentView === 'maintenance-detail' && selectedMaintenance && (
           <MaintenanceDetail
             item={selectedMaintenance}
+            currentUser={currentUser}
             onBack={() => setCurrentView('maintenance-list')}
             onUpdateWorkLog={handleUpdateWorkLog}
             onSubmitCompletion={handleSubmitCompletion}

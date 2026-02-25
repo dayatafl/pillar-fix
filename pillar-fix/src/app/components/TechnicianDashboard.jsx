@@ -8,9 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/app/components/ui/label';
 import { Input } from '@/app/components/ui/input';
 import { Calendar } from '@/app/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/app/components/ui/popover';
 import { toast } from 'sonner';
 import { format, isSameDay, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import api from "@/app/api";
 
 export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAIResult, currentUser, technicians, onUpdateTasks, onAssignTask }) {
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
@@ -35,54 +35,23 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
 
   });
 
-  const handleCreateTask = () => {
-    console.log('newTask:', newTask); // Check what's in newTask
-    console.log('technicians:', technicians); // Check if technicians exist
-    // Validation
-    if (!newTask.id || !newTask.pillarId || !newTask.location || !newTask.address || !newTask.locality || !newTask.lat || !newTask.lng || !newTask.assignedTo || !newTask.status || !newTask.dueDate || !newTask.createdAt) {
-      toast.error('All fields are required');
-      return;
+  const handleCreateTask = async () => {
+    try {
+      await api.post("/tasks", {
+        pillar_id: newTask.pillarId,
+        due_date: newTask.dueDate,
+      });
+      const { data } = await api.get("/tasks");
+      onUpdateTasks(data);
+      toast.success(`Task ${newTask.pillarId} created`);
+      setIsCreateDialogOpen(false);
+      setNewTask({ id:"", pillarId:"", location:"", address:"", locality:"",
+        lat:"", lng:"", assignedTo:"", status:"Pending",
+        dueDate: new Date(Date.now() + 86400000*5).toISOString(),
+        createdAt: new Date().toISOString() });
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to create task");
     }
-
-    // Check if email or username already exists
-    if (tasks.some(u => u.pillarId === newTask.pillarId)) {
-      toast.error('pillarId already exists');
-      return;
-    }
-
-    if (tasks.some(u => u.location === newTask.location)) {
-      toast.error('Location already exists');
-      return;
-    }
-
-    const newtasks = {
-      id: newTask.id,
-      pillarId: newTask.pillarId,
-      location: newTask.location,
-      address: newTask.address,
-      locality: newTask.locality,
-      coordinates: { lat: parseFloat(newTask.lat), lng: parseFloat(newTask.lng) },
-      assignedTo: newTask.assignedTo,
-      status: 'Pending',
-      dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
-      createdAt: new Date().toISOString(),
-    };
-
-    onUpdateTasks([...tasks, newtasks]);
-    toast.success(`Task ${newTask.pillarId} created successfully`);
-    setIsCreateDialogOpen(false);
-    setNewTask({
-      id: '',
-      pillarId: '',
-      location: '',
-      address: '',
-      locality: '',
-      coordinates: '',
-      assignedTo:'',
-      status: 'Pending',
-      dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
-      createdAt: new Date().toISOString(),
-    });
   };
 
 
@@ -147,17 +116,20 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
     setIsAssignDialogOpen(true);
   };
 
-  const handleAssignConfirm = () => {
-    if (!selectedTask || !selectedTechnicianId || !onAssignTask) return;
-
-    const technician = technicians?.find(t => t.id === selectedTechnicianId);
-    if (!technician) return;
-
-    onAssignTask(selectedTask.id, technician.name);
-    toast.success(`Task assigned to ${technician.name}`);
-    setIsAssignDialogOpen(false);
-    setSelectedTask(null);
-    setSelectedTechnicianId('');
+  const handleAssignConfirm = async () => {
+    if (!selectedTask || !selectedTechnicianId) return;
+    try {
+      await api.put(`/tasks/${selectedTask.id}/reassign`, {
+        new_employee_id: selectedTechnicianId,
+      });
+      const technician = technicians.find(t => t.employeeId === selectedTechnicianId);
+      onAssignTask(selectedTask.id, technician.name);
+      toast.success(`Task assigned to ${technician.name}`);
+      setIsAssignDialogOpen(false);
+      setSelectedTechnicianId("");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Reassign failed");
+    }
   };
 
   const statCards = [

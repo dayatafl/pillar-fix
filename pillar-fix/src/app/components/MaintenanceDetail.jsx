@@ -16,26 +16,28 @@ export function MaintenanceDetail({ item, onBack, onUpdateWorkLog, onSubmitCompl
   const fileInputRef = useRef(null);
   const workLogFileInputRef = useRef(null);
 
-  const handleAddWorkLog = () => {
+  const handleAddWorkLog = async () => {
     if (!workLogAction.trim() || !workLogNotes.trim()) {
-      toast.error('Please fill in all work log fields');
-      return;
+      toast.error("Fill in all work log fields"); return;
     }
-
-    const newLog = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      technician: item.assignedTo,
-      action: workLogAction,
-      notes: workLogNotes,
-      images: workLogImages.length > 0 ? workLogImages : undefined,
-    };
-
-    onUpdateWorkLog(item.id, newLog);
-    setWorkLogAction('');
-    setWorkLogNotes('');
-    setWorkLogImages([]);
-    toast.success('Work log added');
+    try {
+      await api.put(`/tasks/${item.taskId}/maintenance`, {
+        maintenance_status: "In Progress",
+        work_log: { action: workLogAction, notes: workLogNotes, images: workLogImages },
+        completion_evidence: "",
+        logged_by: currentUser.employeeId,
+      });
+      onUpdateWorkLog(item.id, {
+        id: Date.now().toString(), timestamp: new Date().toISOString(),
+        technician: item.assignedTo, action: workLogAction, notes: workLogNotes,
+        images: workLogImages.length > 0 ? workLogImages : undefined,
+      });
+      onUpdateStatus(item.id, "In Progress");
+      setWorkLogAction(""); setWorkLogNotes(""); setWorkLogImages([]);
+      toast.success("Work log saved");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to save work log");
+    }
   };
 
   const handleWorkLogImageSelect = (e) => {
@@ -49,22 +51,27 @@ export function MaintenanceDetail({ item, onBack, onUpdateWorkLog, onSubmitCompl
     });
   };
 
-  const handleSubmitCompletion = () => {
+  const handleSubmitCompletion = async () => {
     if (completionImages.length < 4) {
-      toast.error('Please upload at least 4 images of the completed work');
-      return;
+      toast.error("Upload at least 4 completion images"); return;
     }
-
-    const completionData = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      technician: item.assignedTo,
-      images: completionImages.length > 0 ? completionImages :undefined,
-    };
-
-    onSubmitCompletion(item.id, completionData);
-    setCompletionImages([]);
-    toast.success('Completion submitted');
+    try {
+      await api.put(`/tasks/${item.taskId}/maintenance`, {
+        maintenance_status: "Completed",
+        work_log: { action: "Completion evidence submitted",
+          notes: "Post-maintenance photos uploaded", images: completionImages },
+        completion_evidence: completionImages[0],
+        maintenance_validate_by: currentUser.employeeId,
+      });
+      onSubmitCompletion(item.id, {
+        id: Date.now().toString(), timestamp: new Date().toISOString(),
+        technician: item.assignedTo, images: completionImages,
+      });
+      setCompletionImages([]);
+      toast.success("Completion submitted");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Completion failed");
+    }
   };
 
   const handleImageSelect = (e) => {
