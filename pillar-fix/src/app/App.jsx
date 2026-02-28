@@ -27,7 +27,7 @@ import { Login } from '@/app/components/Login';
 import { UserManagement } from '@/app/components/UserManagement';
 import { EnhancedMapView } from '@/app/components/EnhancedMapView';
 import { toast } from 'sonner';
-import logo from './components/logo/FINAL.svg'
+import logo from './components/logo/FINAL.svg';
 import api from "@/app/api";
 
 export default function App() {
@@ -38,17 +38,22 @@ export default function App() {
   // App state
   const [currentView, setCurrentView] = useState('map');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  
+
   // Data management
   const [auditTasks, setAuditTasks] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [maintenanceItems, setMaintenanceItems] = useState([]);
   const [users, setUsers] = useState([]);
-  
+
   // Selected items
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [selectedMaintenanceId, setSelectedMaintenanceId] = useState(null);
+
+  // Derived selections
+  const selectedTask = auditTasks.find(t => t.id === selectedTaskId);
+  const selectedSubmission = submissions.find(s => s.id === selectedSubmissionId);
+  const selectedMaintenance = maintenanceItems.find(m => m.id === selectedMaintenanceId);
 
   const fetchMaintenance = () => {
     api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
@@ -62,9 +67,8 @@ export default function App() {
     api.get("/submissions").then(({ data }) => setSubmissions(data)).catch(console.error);
   }, [isAuthenticated]);
 
-
   // Auth handlers
-  const handleLogin = (user) => {
+  const handleLogin = (user, isSwitching = false) => {
     setCurrentUser(user);
     setIsAuthenticated(true);
 
@@ -96,12 +100,13 @@ export default function App() {
     if (submission) {
       setSelectedSubmissionId(submission.id);
       setCurrentView('detection-results');
-    } else toast.error('No results found');
+    } else {
+      toast.error('No results found');
+    }
   };
 
   const handleSubmitAudit = (submission) => {
     setSubmissions(prev => {
-      // Replace existing submission for the same task if re-submitting, otherwise prepend
       const exists = prev.find(s => s.taskId === submission.taskId);
       if (exists) {
         return prev.map(s => s.taskId === submission.taskId ? submission : s);
@@ -114,19 +119,33 @@ export default function App() {
     setCurrentView('tech-dashboard');
   };
 
+  const handleAssignTask = (taskId, technicianName) => {
+    setAuditTasks(prev =>
+      prev.map(task =>
+        task.id === taskId ? { ...task, assignedTo: technicianName } : task
+      )
+    );
+  };
+
+  const handleSendToSupervisor = (submissionId) => {
+    setSubmissions(prev => prev.map(s =>
+      s.id === submissionId ? { ...s, detectionStatus: 'Completed' } : s
+    ));
+    setCurrentView('supervisor-validation');
+  };
+
+  const handleReviewSubmission = (submissionId) => {
+    setSelectedSubmissionId(submissionId);
+    setCurrentView('supervisor-review');
+  };
+
   // Maintenance & Supervisor Handlers
   const handleApproveForMaintenance = (submissionId, approvalData) => {
     setSubmissions(prev => prev.map(s =>
       s.id === submissionId
-        ? { 
-            ...s, 
-            validated: true, 
-            validationStatus: 'Approved',
-            approvalData: approvalData
-          }
+        ? { ...s, validated: true, validationStatus: 'Approved', approvalData }
         : s
     ));
-    // Update task status to Validated
     const submission = submissions.find(s => s.id === submissionId);
     if (submission) {
       setAuditTasks(prev => prev.map(t =>
@@ -142,14 +161,33 @@ export default function App() {
       s.id === submissionId
         ? { ...s, validated: true, validationStatus: 'Rejected', rejectionReason: reason }
         : s
-        ));
-      toast.info('Submission rejected');
+    ));
+    toast.info('Submission rejected');
     setCurrentView('supervisor-validation');
   };
 
   const handleViewMaintenanceDetail = (itemId) => {
     setSelectedMaintenanceId(itemId);
     setCurrentView('maintenance-detail');
+  };
+
+  const handleUpdateMaintenanceStatus = (itemId, newStatus) => {
+    setMaintenanceItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, status: newStatus } : item
+    ));
+  };
+
+  const handleUpdateWorkLog = (itemId, workLog) => {
+    setMaintenanceItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, workLog } : item
+    ));
+  };
+
+  const handleSubmitCompletion = (itemId) => {
+    setMaintenanceItems(prev => prev.map(item =>
+      item.id === itemId ? { ...item, status: 'Completed' } : item
+    ));
+    setCurrentView('maintenance-list');
   };
 
   // Menu Helper
@@ -175,7 +213,7 @@ export default function App() {
     }
   };
 
-  // AUTH GUARD: Show Login screen first
+  // AUTH GUARD
   if (!isAuthenticated) return <><Login onLogin={(u) => handleLogin(u, false)} /><Toaster /></>;
 
   const menuItems = getMenuItems();
@@ -195,18 +233,17 @@ export default function App() {
 
             <nav className="hidden lg:flex items-center gap-2">
               {menuItems.map((item) => (
-                <Button 
-                  key={item.id} 
-                  variant={currentView === item.view ? 'default' : 'ghost'} 
+                <Button
+                  key={item.id}
+                  variant={currentView === item.view ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setCurrentView(item.view)}
                 >
                   <item.icon className="h-4 w-4 mr-2" /> {item.label}
                 </Button>
               ))}
-              
+
               <div className="flex items-center gap-2 ml-4 pl-4 border-l">
-                {/* ROLE SWITCHER DROPDOWN */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="flex items-center gap-3 h-auto py-1 px-2 hover:bg-gray-100">
@@ -223,35 +260,35 @@ export default function App() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-47">
-                  <DropdownMenuLabel>Demo Role</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  
-                  {/* Filter to show only one user per role to simplify the demo */}
-                  {users
-                    .filter((user) => user.name !== 'Maria Garcia') // Specifically removes the extra technician
-                    .map((user) => (
-                      <DropdownMenuItem 
-                        key={user.id} 
-                        onClick={() => handleLogin(user, true)} 
-                        className={`cursor-pointer ${currentUser.id === user.id ? 'bg-blue-50' : ''}`}
-                      >
-                        {getRoleIcon(user.role)}
-                        <div className="flex flex-col">
-                          <span className="text-sm">{user.name}</span>
-                          <span className="text-[10px] text-gray-500 capitalize">{user.role}</span>
-                        </div>
-                      </DropdownMenuItem>
-                    ))}
-                    
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="text-red-600 cursor-pointer">
-                    <LogOut className="mr-2 h-4 w-4" /> Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
+                    <DropdownMenuLabel>Demo Role</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {users
+                      .filter((user) => user.name !== 'Maria Garcia')
+                      .map((user) => (
+                        <DropdownMenuItem
+                          key={user.id}
+                          onClick={() => handleLogin(user, true)}
+                          className={`cursor-pointer ${currentUser.id === user.id ? 'bg-blue-50' : ''}`}
+                        >
+                          {getRoleIcon(user.role)}
+                          <div className="flex flex-col">
+                            <span className="text-sm">{user.name}</span>
+                            <span className="text-[10px] text-gray-500 capitalize">{user.role}</span>
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="text-red-600 cursor-pointer">
+                      <LogOut className="mr-2 h-4 w-4" /> Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </nav>
-            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden p-2"><Menu className="h-6 w-6" /></button>
+
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden p-2">
+              <Menu className="h-6 w-6" />
+            </button>
           </div>
         </div>
       </header>
@@ -265,7 +302,7 @@ export default function App() {
             onViewAIResult={handleViewAIResultFromTask}
             currentUser={currentUser}
             technicians={users}
-            onUpdateTasks={setAuditTasks} 
+            onUpdateTasks={setAuditTasks}
             onAssignTask={handleAssignTask}
           />
         )}
@@ -290,11 +327,10 @@ export default function App() {
 
         {currentView === 'supervisor-validation' && (
           <SupervisorValidation
-            submissions={submissions.filter(s => 
-              s.detectionStatus === 'Completed')}
+            submissions={submissions.filter(s => s.detectionStatus === 'Completed')}
             onReview={handleReviewSubmission}
-            />
-          )}
+          />
+        )}
 
         {currentView === 'supervisor-review' && selectedSubmission && (
           <SupervisorReview
@@ -338,15 +374,13 @@ export default function App() {
         )}
 
         {currentView === 'map' && (
-          <EnhancedMapView 
+          <EnhancedMapView
             maintenanceItems={maintenanceItems}
             auditTasks={auditTasks}
             submissions={submissions}
             onPillarSelect={(pillarId) => {
               const item = maintenanceItems.find(m => m.pillarId === pillarId);
-              if (item) {
-                handleViewMaintenanceDetail(item.id);
-              }
+              if (item) handleViewMaintenanceDetail(item.id);
             }}
           />
         )}
