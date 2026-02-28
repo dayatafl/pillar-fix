@@ -27,12 +27,8 @@ import { Login } from '@/app/components/Login';
 import { UserManagement } from '@/app/components/UserManagement';
 import { EnhancedMapView } from '@/app/components/EnhancedMapView';
 import { toast } from 'sonner';
-<<<<<<< HEAD
-import logo from './components/logo/FINAL.svg';
-=======
 import logo from './components/logo/FINAL.svg'
 import api from "@/app/api";
->>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
 
 export default function App() {
   // Auth state
@@ -60,30 +56,6 @@ export default function App() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-<<<<<<< HEAD
-
-    const interval = setInterval(() => {
-      setSubmissions(prev => {
-        const queued = prev.filter(s => s.detectionStatus === 'Queued');
-        if (queued.length > 0) {
-          const toProcess = queued[0];
-          setTimeout(() => {
-            setSubmissions(p => p.map(s => s.id === toProcess.id ? { ...s, detectionStatus: 'Processing' } : s));
-            setTimeout(() => {
-              const results = simulateAIDetection(toProcess);
-              setSubmissions(p => p.map(s => s.id === toProcess.id ? { ...s, detectionStatus: 'Completed', detectionResults: results } : s));
-              toast.success(`AI detection completed for ${toProcess.pillarId}`);
-            }, 3000);
-          }, 1000);
-        }
-        return prev;
-      });
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated]);
-
-  const handleLogin = (user, isSwitching = false) => {
-=======
     api.get("/tasks").then(({ data }) => setAuditTasks(data)).catch(console.error);
     api.get("/users").then(({ data }) => setUsers(data)).catch(console.error);
     api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
@@ -93,7 +65,6 @@ export default function App() {
 
   // Auth handlers
   const handleLogin = (user) => {
->>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
     setCurrentUser(user);
     setIsAuthenticated(true);
 
@@ -129,10 +100,6 @@ export default function App() {
   };
 
   const handleSubmitAudit = (submission) => {
-<<<<<<< HEAD
-    setSubmissions(prev => [submission, ...prev]);
-    setAuditTasks(prev => prev.map(t => t.id === submission.taskId ? { ...t, status: 'Completed' } : t));
-=======
     setSubmissions(prev => {
       // Replace existing submission for the same task if re-submitting, otherwise prepend
       const exists = prev.find(s => s.taskId === submission.taskId);
@@ -144,19 +111,11 @@ export default function App() {
     setAuditTasks(prev => prev.map(t =>
       t.id === submission.taskId ? { ...t, status: 'Submitted' } : t
     ));
->>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
     setCurrentView('tech-dashboard');
   };
 
   // Maintenance & Supervisor Handlers
   const handleApproveForMaintenance = (submissionId, approvalData) => {
-<<<<<<< HEAD
-    const submission = submissions.find(s => s.id === submissionId);
-    if (submission) {
-      setMaintenanceItems(prev => [createMockMaintenanceItem(submission, approvalData), ...prev]);
-      setSubmissions(prev => prev.map(s => s.id === submissionId ? { ...s, validated: true, validationStatus: 'Approved' } : s));
-    }
-=======
     setSubmissions(prev => prev.map(s =>
       s.id === submissionId
         ? { 
@@ -175,19 +134,10 @@ export default function App() {
       ));
     }
     fetchMaintenance();
->>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
     setCurrentView('supervisor-validation');
   };
 
   const handleRejectSubmission = (submissionId, reason) => {
-<<<<<<< HEAD
-    setSubmissions(prev => prev.map(s => s.id === submissionId ? { ...s, validated: true, validationStatus: 'Rejected', rejectionReason: reason } : s));
-    setCurrentView('supervisor-validation');
-  };
-
-  const handleAssignTask = (taskId, technicianName) => {
-    setAuditTasks(prev => prev.map(task => task.id === taskId ? { ...task, assignedTo: technicianName } : task));
-=======
     setSubmissions(prev => prev.map(s =>
       s.id === submissionId
         ? { ...s, validated: true, validationStatus: 'Rejected', rejectionReason: reason }
@@ -195,7 +145,6 @@ export default function App() {
         ));
       toast.info('Submission rejected');
     setCurrentView('supervisor-validation');
->>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
   };
 
   const handleViewMaintenanceDetail = (itemId) => {
@@ -308,18 +257,6 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-<<<<<<< HEAD
-        {currentView === 'tech-dashboard' && <TechnicianDashboard tasks={auditTasks} submissions={submissions} onStartAudit={handleStartAudit} onViewAIResult={handleViewAIResultFromTask} currentUser={currentUser} technicians={users} onUpdateTasks={setAuditTasks} onAssignTask={handleAssignTask} />}
-        {currentView === 'audit-form' && <AuditForm task={auditTasks.find(t => t.id === selectedTaskId)} onBack={() => setCurrentView('tech-dashboard')} onSubmit={handleSubmitAudit} />}
-        {currentView === 'detection-results' && <DetectionResults submission={submissions.find(s => s.id === selectedSubmissionId)} currentUser={currentUser} onBack={() => setCurrentView('tech-dashboard')} onSendToSupervisor={(id) => { setSubmissions(p => p.map(s => s.id === id ? {...s, sentToSupervisor: true} : s)); setCurrentView('tech-dashboard'); }} onViewValidation={(id) => { setSelectedSubmissionId(id); setCurrentView('supervisor-review'); }} />}
-        {currentView === 'supervisor-validation' && <SupervisorValidation submissions={submissions.filter(s => s.detectionStatus === 'Completed')} onReview={(id) => { setSelectedSubmissionId(id); setCurrentView('supervisor-review'); }} />}
-        {currentView === 'supervisor-review' && <SupervisorReview submission={submissions.find(s => s.id === selectedSubmissionId)} onBack={() => setCurrentView('supervisor-validation')} onApprove={handleApproveForMaintenance} onReject={handleRejectSubmission} />}
-        {currentView === 'maintenance-list' && <MaintenanceList items={maintenanceItems} onViewDetails={handleViewMaintenanceDetail} onUpdateStatus={(id, s) => setMaintenanceItems(p => p.map(i => i.id === id ? {...i, status: s} : i))} />}
-        {currentView === 'maintenance-detail' && <MaintenanceDetail item={maintenanceItems.find(m => m.id === selectedMaintenanceId)} onBack={() => setCurrentView('maintenance-list')} onUpdateWorkLog={(id, l) => setMaintenanceItems(p => p.map(i => i.id === id ? {...i, workLogs: [...i.workLogs, l]} : i))} onSubmitCompletion={(id, d) => setMaintenanceItems(p => p.map(i => i.id === id ? {...i, status: 'Completed', completion: d} : i))} onUpdateStatus={(id, s) => setMaintenanceItems(p => p.map(i => i.id === id ? {...i, status: s} : i))} />}
-        {currentView === 'analytics' && <Analytics maintenanceItems={maintenanceItems} />}
-        {currentView === 'user-management' && <UserManagement currentUser={currentUser} users={users} onUpdateUsers={setUsers} />}
-        {currentView === 'map' && <EnhancedMapView maintenanceItems={maintenanceItems} auditTasks={auditTasks} submissions={submissions} onPillarSelect={(pId) => { const item = maintenanceItems.find(m => m.pillarId === pId); if (item) handleViewMaintenanceDetail(item.id); }} />}
-=======
         {currentView === 'tech-dashboard' && (
           <TechnicianDashboard
             tasks={auditTasks}
@@ -413,7 +350,6 @@ export default function App() {
             }}
           />
         )}
->>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
       </main>
       <Toaster />
     </div>
