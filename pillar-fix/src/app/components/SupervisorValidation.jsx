@@ -91,80 +91,75 @@ export function SupervisorValidation({ submissions, onReview }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
               High Priority
             </CardTitle>
-            <Siren className="h-5 w-5 text-red-500"/>
-            </div>
+            <Siren className="h-5 w-5 text-red-600"/>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {submissions.filter(s => s.overallRisk === 'Critical' || s.overallRisk === 'High').length}
+              {highPriorityCount}
             </div>
+            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
               Pending
             </CardTitle>
-            <Clock className="h-5 w-5 text-yellow-500" />
-            </div>
+            <Clock className="h-5 w-5 text-yellow-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pendingReview.length}</div>
+            <div className="text-2xl font-bold">{pendingReviewCount}</div>
+            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>        
 
         <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
               Approved
             </CardTitle>
             <CheckCircle className="h-5 w-5 text-green-600" />
-            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
               {submissions.filter(s => (s.validationStatus || 'Pending') === 'Approved').length}
             </div>
+            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
               Rejected
             </CardTitle>
-            <AlertCircle className="h-5 w-5 text-red-500" />
-            </div>
+            <AlertCircle className="h-5 w-5 text-red-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
               {submissions.filter(s => (s.validationStatus || 'Pending') === 'Rejected').length}
             </div>
+            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
+          <CardHeader className="flex 2flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
               Total Reviewed
             </CardTitle>
             <MapPin className="h-5 w-5 text-blue-600" />
-            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {submissions.filter(s => s.overallRisk).length}
+              {totalReviewedCount}
             </div>
+            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
       </div>
@@ -185,6 +180,7 @@ export function SupervisorValidation({ submissions, onReview }) {
           </Select>
         </div>
       </div>
+
       <Card>
         <CardContent>
           <div className="py-4 space-y-3">

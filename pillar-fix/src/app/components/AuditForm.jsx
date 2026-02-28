@@ -64,26 +64,9 @@ export function AuditForm({ task, onBack, onSubmit }) {
       },
       (error) => {
         setIsCapturingLocation(false);
-
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            toast.error('Location permission denied');
-            break;
-          case error.POSITION_UNAVAILABLE:
-            toast.error('Location information unavailable');
-            break;
-          case error.TIMEOUT:
-            toast.error('Location request timed out');
-            break;
-          default:
-            toast.error('Failed to capture location');
-        }
+        toast.error('Failed to capture location');
       },
-      {
-        enableHighAccuracy: true, // uses GPS when available
-        timeout: 10000,           // 10 seconds
-        maximumAge: 0,            // no cached location
-      }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -117,7 +100,7 @@ export function AuditForm({ task, onBack, onSubmit }) {
       submittedBy: task.assignedTo,
       submittedAt: new Date().toISOString(),
       detectionStatus: 'Queued',
-      validationStatus: 'Pending', //added
+      validationStatus: 'Pending',
     };
 
     onSubmit(submission);
@@ -143,15 +126,17 @@ export function AuditForm({ task, onBack, onSubmit }) {
         {/* Image Capture */}
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-0">
               <CardTitle>Capture 4-Side Images</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Added pt-8 to create a wider gap from the title */}
+            <CardContent className="pt-4 space-y-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
                 {SIDES.map(({ side, label }) => (
-                  <div key={side} className="space-y-2">
-                    <Label htmlFor={side} className="flex items-center justify-between">
-                      <span>{label} Side</span>
+                  <div key={side} className="space-y-3">
+                    {/* Added mb-2 for consistent spacing below labels */}
+                    <Label htmlFor={side} className="flex items-center justify-between mb-2">
+                      <span className="font-medium">{label} Side</span>
                       {images[side] && (
                         <Badge variant="default" className="gap-1">
                           <Check className="h-3 w-3" />
@@ -191,12 +176,12 @@ export function AuditForm({ task, onBack, onSubmit }) {
                       <Button
                         type="button"
                         variant="outline"
-                        className="w-full h-48 border-dashed"
+                        className="w-full h-48 border-dashed bg-gray-50/50 hover:bg-gray-50 transition-colors"
                         onClick={() => fileInputRefs[side].current?.click()}
                       >
                         <div className="flex flex-col items-center gap-2">
                           <Camera className="h-8 w-8 text-gray-400" />
-                          <span className="text-sm">Upload {label} Image</span>
+                          <span className="text-sm text-gray-500">Upload {label} Image</span>
                         </div>
                       </Button>
                     )}
@@ -210,65 +195,54 @@ export function AuditForm({ task, onBack, onSubmit }) {
         {/* Sidebar */}
         <div className="space-y-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-0"> {/* Reduced bottom padding */}
               <CardTitle>Pillar Details</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            {/* Increased pt-6 to create wider gap between Title and Pillar ID */}
+            <CardContent className="space-y-4 pt-4"> 
               <div>
-                <Label className="text-gray-600">Pillar ID</Label>
+                <Label className="text-gray-600 block mb-1.5">Pillar ID</Label>
                 <Input value={task.pillarId} readOnly className="bg-gray-50" />
               </div>
 
               <div>
-                <Label className="text-gray-600">Location</Label>
+                <Label className="text-gray-600 block mb-1.5">Location</Label>
                 <Input value={task.location} readOnly className="bg-gray-50" />
               </div>
 
               <div>
-                <Label className="text-gray-600">Address</Label>
+                <Label className="text-gray-600 block mb-1.5">Address</Label>
                 <Input value={task.address} readOnly className="bg-gray-50" />
               </div>
 
               <div>
-                <Label className="text-gray-600">Locality</Label>
+                <Label className="text-gray-600 block mb-1.5">Locality</Label>
                 <Input value={task.locality} readOnly className="bg-gray-50" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-0">
               <CardTitle>GPS Location</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4"> {/* Synchronized spacing */}
               {currentCoordinates ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                    <span className="text-sm font-medium text-green-900">
-                      Location Captured
-                    </span>
+                    <span className="text-sm font-medium text-green-900">Location Captured</span>
                     <Check className="h-5 w-5 text-green-600" />
                   </div>
                   <div className="text-xs text-gray-600 space-y-1">
                     <p>Latitude: {currentCoordinates.lat.toFixed(6)}</p>
                     <p>Longitude: {currentCoordinates.lng.toFixed(6)}</p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={captureGPSLocation}
-                    disabled={isCapturingLocation}
-                  >
+                  <Button size="sm" variant="outline" className="w-full" onClick={captureGPSLocation} disabled={isCapturingLocation}>
                     Recapture Location
                   </Button>
                 </div>
               ) : (
-                <Button
-                  onClick={captureGPSLocation}
-                  disabled={isCapturingLocation}
-                  className="w-full"
-                >
+                <Button onClick={captureGPSLocation} disabled={isCapturingLocation} className="w-full">
                   <MapPin className="h-4 w-4 mr-2" />
                   {isCapturingLocation ? 'Capturing...' : 'Capture GPS Location'}
                 </Button>
@@ -277,39 +251,24 @@ export function AuditForm({ task, onBack, onSubmit }) {
           </Card>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-0">
               <CardTitle>Upload Progress</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {SIDES.map(({ side, label }) => (
-                  <div key={side} className="flex items-center justify-between">
-                    <span className="text-sm">{label}</span>
-                    {images[side] ? (
-                      <Check className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
-                    )}
-                  </div>
-                ))}
-                <div className="flex items-center justify-between pt-2 border-t">
-                  <span className="text-sm font-medium">GPS Location</span>
-                  {currentCoordinates ? (
-                    <Check className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <div className="h-4 w-4 rounded-full border-2 border-gray-300" />
-                  )}
+            <CardContent className="space-y-3 pt-4"> {/* Synchronized spacing */}
+              {SIDES.map(({ side, label }) => (
+                <div key={side} className="flex items-center justify-between">
+                  <span className="text-sm">{label}</span>
+                  {images[side] ? <Check className="h-4 w-4 text-green-600" /> : <div className="h-4 w-4 rounded-full border-2 border-gray-300" />}
                 </div>
+              ))}
+              <div className="flex items-center justify-between pt-2 border-t">
+                <span className="text-sm font-medium">GPS Location</span>
+                {currentCoordinates ? <Check className="h-4 w-4 text-green-600" /> : <div className="h-4 w-4 rounded-full border-2 border-gray-300" />}
               </div>
             </CardContent>
           </Card>
 
-          <Button
-            onClick={handleSubmit}
-            disabled={!allImagesUploaded || !currentCoordinates}
-            className="w-full"
-            size="lg"
-          >
+          <Button onClick={handleSubmit} disabled={!allImagesUploaded || !currentCoordinates} className="w-full" size="lg">
             <Upload className="h-5 w-5 mr-2" />
             Submit for AI Detection
           </Button>

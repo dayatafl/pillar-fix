@@ -82,58 +82,57 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
         </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* Key Matrix */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
-            <CardTitle className="text-sm font-medium text-gray-600">Total Items</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              Total Items
+              </CardTitle>
             <MapPin className="h-5 w-5 text-blue-600" />
-            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
-            <CardTitle className="text-sm font-medium text-gray-600">Pending</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600">
+              Pending
+              </CardTitle>
             <AlertCircle className="h-5 w-5 text-red-500" />
-            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.pending}</div>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-gray-600">In Progress</CardTitle>
               <Clock className="h-5 w-5 text-yellow-500" />
-            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.inProgress}</div>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Completed</CardTitle>
             <CheckCircle className="h-5 w-5 text-green-600" />
-            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.completed}</div>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader className="pb-2">
-            <div className = "flex items-center justify-between">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Total Cost</CardTitle>
              <Banknote className="h-5 w-5 text-blue-600" />
-            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">RM{stats.totalCost.toLocaleString()}</div>
@@ -173,11 +172,15 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
       {/* Maintenance Items */}
       <div className="space-y-4">
         {filteredItems.length === 0 ? (
-          <Card>
-            <CardContent className="p-12 text-center text-gray-500">
-              No maintenance items found
-            </CardContent>
-          </Card>
+            <Card>
+              <CardContent>
+                <div className="py-4 space-y-3">
+                  <div className="text-center py-12 text-gray-500">
+                    No maintenance items found
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
         ) : (
           filteredItems.map((item) => (
             <Card key={item.id} className="hover:shadow-lg transition-shadow">
@@ -190,7 +193,8 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
                         <p className="text-gray-600 text-sm">{item.address}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {getStatusBadge(item.status)}
+                        {/* 1. Remove Pending badge from top row */}
+                        {item.status !== 'Pending' && item.status !== 'In Progress' && item.status !== 'Completed' && getStatusBadge(item.status)}
                         {getPriorityBadge(item.priority)}
                         {getSeverityBadge(item.severity)}
                       </div>
@@ -236,34 +240,44 @@ export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
                     </div>
 
                     <div className="flex flex-wrap gap-2 justify-end pt-2">
-                      {/* Status Update Buttons */}
-                      {onUpdateStatus && item.status !== 'Completed' && item.status !== 'Verified' && (
-                        <>
-                          {(item.status === 'Pending' || item.status === 'Approved' || item.status === 'Scheduled') && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              onClick={() => handleStatusUpdate(item.id, 'In Progress')}
-                              className="gap-2"
-                            >
-                              <CheckCircle className="h-4 w-4" />
-                              Mark as In Progress
-                            </Button>
-                          )}
-                          {item.status === 'In Progress' && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              onClick={() => handleStatusUpdate(item.id, 'Completed')}
-                              className="gap-2 bg-green-600 hover:bg-green-700"
-                            >
-                              <CheckCircle className="h-4 w-4" />
-                              Mark as Completed
-                            </Button>
-                          )}
-                        </>
+                      {/* 2. Show static status indicator instead of clickable action buttons */}
+                      {item.status === 'Pending' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          className="bg-yellow-50 text-yellow-700 border-yellow-200 opacity-100 cursor-default"
+                        >
+                          <Clock className="h-4 w-4 mr-2" />
+                          Pending
+                        </Button>
                       )}
-                      
+
+                      {item.status === 'In Progress' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          className="bg-purple-50 text-purple-700 border-purple-200 opacity-100 cursor-default"
+                        >
+                          <Play className="h-4 w-4 mr-2" />
+                          In Progress
+                        </Button>
+                      )}
+
+                      {item.status === 'Completed' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          className="bg-green-50 text-green-700 border-green-200 opacity-100 cursor-default"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Completed
+                        </Button>
+                      )}
+
+                      {/* 3. The View Full Details button stays as the primary action */}
                       <Button
                         variant="outline"
                         size="sm"
