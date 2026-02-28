@@ -6,6 +6,7 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Badge } from '@/app/components/ui/badge';
 import { toast } from 'sonner';
+import api from "@/app/api";
 
 const SIDES = [
   { side: 'front', label: 'Front' },
@@ -70,12 +71,42 @@ export function AuditForm({ task, onBack, onSubmit }) {
     );
   };
 
-  const handleSubmit = () => {
-    const allImagesUploaded = SIDES.every((s) => images[s.side]);
-    
-    if (!allImagesUploaded) {
-      toast.error('Please upload images for all 4 sides');
-      return;
+  const handleSubmit = async () => {
+    if (!allImagesUploaded || !currentCoordinates) return;
+    try {
+      const { data } = await api.put(`/tasks/${task.id}/submit`, {
+        image1: images.front,
+        image2: images.right,
+        image3: images.back,
+        image4: images.left,
+        user_current_location: currentCoordinates,   // { lat, lng }
+      });
+
+      const submission = {
+        id: data.photo_id,
+        taskId: task.id,
+        pillarId: task.pillarId,
+        location: task.location,
+        address: task.address,
+        coordinates: currentCoordinates,
+        images: [
+          { side: "front", imageUrl: images.front },
+          { side: "right", imageUrl: images.right },
+          { side: "back",  imageUrl: images.back  },
+          { side: "left",  imageUrl: images.left  },
+        ],
+        submittedBy: task.assignedTo,
+        submittedAt: new Date().toISOString(),
+        detectionStatus: "Completed",         // AI runs sync on backend
+        detectionResults: data.detectionResults,
+        overallRisk: data.overallRisk,
+        validationStatus: "Pending",
+      };
+
+      onSubmit(submission);
+      toast.success("Audit submitted — AI detection complete");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Submission failed");
     }
 
     if (!currentCoordinates) {

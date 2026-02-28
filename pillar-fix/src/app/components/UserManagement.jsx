@@ -10,12 +10,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/app/components/ui/badge';
 import { Switch } from '@/app/components/ui/switch';
 import { toast } from 'sonner';
+import api from '@/app/api';
 
 export function UserManagement({ currentUser, users, onUpdateUsers }) {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [newUser, setNewUser] = useState({
     name: '',
     email: '',
@@ -23,6 +25,7 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
     employeeId: '',
     role: 'technician',
     password: '',
+    locality: '',
   });
   const [editUser, setEditUser] = useState({
     name: '',
@@ -30,9 +33,10 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
     username: '',
     employeeId: '',
     role: 'technician',
+    locality: '',
   });
 
-  const handleCreateUser = () => {
+  const handleCreateUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.username || !newUser.employeeId || !newUser.password) {
       toast.error('All fields are required');
       return;
@@ -46,51 +50,68 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
       return;
     }
 
-    const user = {
-      id: Date.now().toString(),
-      name: newUser.name,
-      email: newUser.email,
-      username: newUser.username,
-      employeeId: newUser.employeeId,
-      role: newUser.role,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      createdBy: currentUser.id,
-    };
+    setLoading(true);
+    try {
+      const { data } = await api.post('/users', {
+        name: newUser.name,
+        email: newUser.email,
+        username: newUser.username,
+        employeeId: newUser.employeeId,
+        role: newUser.role,
+        password: newUser.password,
+        locality: newUser.locality || null,
+      });
 
-    onUpdateUsers([...users, user]);
-    toast.success(`User ${user.name} created successfully`);
-    setIsCreateDialogOpen(false);
-    setNewUser({ name: '', email: '', username: '', employeeId: '', role: 'technician', password: '' });
+      onUpdateUsers([...users, data]);
+      toast.success(`User ${data.name} created successfully`);
+      setIsCreateDialogOpen(false);
+      setNewUser({ name: '', email: '', username: '', employeeId: '', role: 'technician', password: '', locality: '' });
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to create user');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEditUser = (user) => {
     setSelectedUser(user);
-    setEditUser({ name: user.name, email: user.email, username: user.username, employeeId: user.employeeId, role: user.role });
+    setEditUser({
+      name: user.name,
+      email: user.email,
+      username: user.username,
+      employeeId: user.employeeId,
+      role: user.role,
+      locality: user.locality || '',
+    });
     setIsEditDialogOpen(true);
   };
 
-  const handleUpdateUser = () => {
+  const handleUpdateUser = async () => {
     if (!editUser.name || !editUser.email || !editUser.username || !editUser.employeeId) {
       toast.error('All fields are required');
       return;
     }
-    if (users.some(u => u.email === editUser.email && u.id !== selectedUser.id)) {
-      toast.error('Email already exists');
-      return;
-    }
-    if (users.some(u => u.username === editUser.username && u.id !== selectedUser.id)) {
-      toast.error('Username already exists');
-      return;
-    }
 
-    const updatedUsers = users.map(user =>
-      user.id === selectedUser.id ? { ...user, ...editUser } : user
-    );
-    onUpdateUsers(updatedUsers);
-    toast.success(`User ${editUser.name} updated successfully`);
-    setIsEditDialogOpen(false);
-    setSelectedUser(null);
+    setLoading(true);
+    try {
+      const { data } = await api.put(`/users/${selectedUser.id}`, {
+        name: editUser.name,
+        email: editUser.email,
+        username: editUser.username,
+        employeeId: editUser.employeeId,
+        role: editUser.role,
+        locality: editUser.locality || null,
+      });
+
+      onUpdateUsers(users.map(u => u.id === selectedUser.id ? { ...u, ...data } : u));
+      toast.success(`User ${data.name} updated successfully`);
+      setIsEditDialogOpen(false);
+      setSelectedUser(null);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update user');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeleteUser = (user) => {
@@ -98,22 +119,33 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
     setIsDeleteDialogOpen(true);
   };
 
-  const confirmDeleteUser = () => {
-    const updatedUsers = users.filter(u => u.id !== selectedUser.id);
-    onUpdateUsers(updatedUsers);
-    toast.success(`User ${selectedUser.name} deleted successfully`);
-    setIsDeleteDialogOpen(false);
-    setSelectedUser(null);
+  const confirmDeleteUser = async () => {
+    setLoading(true);
+    try {
+      await api.delete(`/users/${selectedUser.id}`);
+
+      onUpdateUsers(users.filter(u => u.id !== selectedUser.id));
+      toast.success(`User ${selectedUser.name} deleted successfully`);
+      setIsDeleteDialogOpen(false);
+      setSelectedUser(null);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to delete user');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleToggleUserStatus = (userId) => {
-    const updatedUsers = users.map(user =>
-      user.id === userId ? { ...user, isActive: !user.isActive } : user
-    );
-    onUpdateUsers(updatedUsers);
+  const handleToggleUserStatus = async (userId) => {
     const user = users.find(u => u.id === userId);
-    if (user) {
-      toast.success(`User ${user.name} ${!user.isActive ? 'activated' : 'deactivated'}`);
+    if (!user) return;
+
+    try {
+      const { data } = await api.patch(`/users/${userId}/status`);
+
+      onUpdateUsers(users.map(u => u.id === userId ? { ...u, isActive: data.isActive } : u));
+      toast.success(`User ${user.name} ${data.isActive ? 'activated' : 'deactivated'}`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update status');
     }
   };
 
@@ -142,7 +174,6 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Total Users</CardTitle>
@@ -296,13 +327,24 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
               </Select>
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="locality">Locality (for technicians)</Label>
+              <Input
+                id="locality"
+                value={newUser.locality}
+                onChange={(e) => setNewUser({ ...newUser, locality: e.target.value })}
+                placeholder="Kuala Lumpur City Centre"
+              />
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="password">Initial Password</Label>
               <Input id="password" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="Temporary password" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleCreateUser}>Create User</Button>
+            <Button onClick={handleCreateUser} disabled={loading}>
+              {loading ? 'Creating...' : 'Create User'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -332,6 +374,15 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
               <Input id="edit-employeeId" value={editUser.employeeId} onChange={(e) => setEditUser({ ...editUser, employeeId: e.target.value })} placeholder="EMP001" />
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="edit-locality">Locality (for technicians)</Label>
+              <Input
+                id="edit-locality"
+                value={editUser.locality}
+                onChange={(e) => setEditUser({ ...editUser, locality: e.target.value })}
+                placeholder="Kuala Lumpur City Centre"
+              />
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="edit-role">Role</Label>
               <Select value={editUser.role} onValueChange={(value) => setEditUser({ ...editUser, role: value })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -346,7 +397,9 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleUpdateUser}>Update User</Button>
+            <Button onClick={handleUpdateUser} disabled={loading}>
+              {loading ? 'Updating...' : 'Update User'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -369,7 +422,9 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={confirmDeleteUser}>Delete User</Button>
+            <Button variant="destructive" onClick={confirmDeleteUser} disabled={loading}>
+              {loading ? 'Deleting...' : 'Delete User'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

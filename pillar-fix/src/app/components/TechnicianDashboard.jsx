@@ -9,7 +9,8 @@ import { Label } from '@/app/components/ui/label';
 import { Input } from '@/app/components/ui/input';
 import { Calendar } from '@/app/components/ui/calendar';
 import { toast } from 'sonner';
-import { format, isSameDay, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
+import api from "@/app/api";
 
 export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAIResult, currentUser, technicians, onUpdateTasks, onAssignTask }) {
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
@@ -20,52 +21,35 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
   const [isCalendarFilterOpen, setIsCalendarFilterOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newTask, setNewTask] = useState({
-    id: '',
     pillarId: '',
-    location: '',
-    address: '',
-    locality: '',
-    lat: '',
-    lng: '',
-    assignedTo:'',
-    status: 'Pending',
     dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
-    createdAt: new Date().toISOString(),
   });
 
-  const handleCreateTask = () => {
-    if (!newTask.id || !newTask.pillarId || !newTask.location || !newTask.address || !newTask.locality || !newTask.lat || !newTask.lng || !newTask.assignedTo) {
-      toast.error('All fields are required');
+  const handleCreateTask = async () => {
+    if (!newTask.pillarId || !newTask.dueDate) {
+      toast.error('Pillar ID and due date are required');
       return;
     }
 
-    if (tasks.some(u => u.pillarId === newTask.pillarId)) {
-      toast.error('pillarId already exists');
-      return;
+    try {
+      await api.post('/tasks', {
+        pillar_id: newTask.pillarId,
+        due_date: newTask.dueDate,
+        created_by: currentUser?.employeeId,
+      });
+
+      const { data } = await api.get('/tasks');
+      onUpdateTasks(data);
+
+      toast.success(`Task for ${newTask.pillarId} created successfully`);
+      setIsCreateDialogOpen(false);
+      setNewTask({
+        pillarId: '',
+        dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
+      });
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to create task');
     }
-
-    const newtasks = {
-      id: newTask.id,
-      pillarId: newTask.pillarId,
-      location: newTask.location,
-      address: newTask.address,
-      locality: newTask.locality,
-      coordinates: { lat: parseFloat(newTask.lat), lng: parseFloat(newTask.lng) },
-      assignedTo: newTask.assignedTo,
-      status: 'Pending',
-      dueDate: newTask.dueDate,
-      createdAt: new Date().toISOString(),
-    };
-
-    onUpdateTasks([...tasks, newtasks]);
-    toast.success(`Task ${newTask.pillarId} created successfully`);
-    setIsCreateDialogOpen(false);
-    setNewTask({
-      id: '', pillarId: '', location: '', address: '', locality: '', 
-      lat: '', lng: '', assignedTo:'', status: 'Pending',
-      dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
-      createdAt: new Date().toISOString(),
-    });
   };
 
   const isSupervisorOrAbove = currentUser && ['supervisor', 'manager', 'admin'].includes(currentUser.role);
@@ -76,7 +60,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
     : tasks;
 
   if (selectedDate) {
-    filteredTasks = filteredTasks.filter(task => 
+    filteredTasks = filteredTasks.filter(task =>
       isSameDay(new Date(task.dueDate), selectedDate)
     );
   }
@@ -94,11 +78,14 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
     setDateRange({});
   };
 
+  const isTaskDone = (status) => ['Completed', 'Submitted', 'Validated'].includes(status);
+  const isTaskInProgress = (status) => status === 'In Progress';
+
   const stats = {
     total: filteredTasks.length,
     pending: filteredTasks.filter(t => t.status === 'Pending').length,
-    inProgress: filteredTasks.filter(t => t.status === 'In Progress').length,
-    completed: filteredTasks.filter(t => t.status === 'Completed').length,
+    inProgress: filteredTasks.filter(t => isTaskInProgress(t.status)).length,
+    completed: filteredTasks.filter(t => isTaskDone(t.status)).length,
   };
 
   const groupedByLocality = filteredTasks.reduce((acc, task) => {
@@ -113,15 +100,22 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
     setIsAssignDialogOpen(true);
   };
 
-  const handleAssignConfirm = () => {
-    const technician = technicians?.find(t => t.id === selectedTechnicianId);
-    if (!technician) return;
-    onAssignTask(selectedTask.id, technician.name);
-    toast.success(`Task assigned to ${technician.name}`);
-    setIsAssignDialogOpen(false);
+  const handleAssignConfirm = async () => {
+    if (!selectedTask || !selectedTechnicianId) return;
+    try {
+      await api.put(`/tasks/${selectedTask.id}/reassign`, {
+        new_employee_id: selectedTechnicianId,
+      });
+      const technician = technicians.find(t => t.employeeId === selectedTechnicianId);
+      onAssignTask(selectedTask.id, technician.name);
+      toast.success(`Task assigned to ${technician.name}`);
+      setIsAssignDialogOpen(false);
+      setSelectedTechnicianId("");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Reassign failed");
+    }
   };
 
-  {/* Key Metrics */}
   const statCards = [
     { title: 'Total Tasks', value: stats.total, icon: MapPin, color: 'text-blue-600' },
     { title: 'Pending', value: stats.pending, icon: Clock, color: 'text-yellow-600' },
@@ -140,8 +134,8 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
         </p>
       </div>
 
+      {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-
         {statCards.map((stat, index) => (
           <Card key={index}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -158,7 +152,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
 
       {/* Filters Row */}
       <div className="flex w-full justify-between items-center">
-        <div 
+        <div
           className="border rounded-md px-3 py-2 text-sm bg-white flex items-center justify-between w-full md:w-64 cursor-pointer shadow-sm"
           onClick={() => setIsCalendarFilterOpen(!isCalendarFilterOpen)}
         >
@@ -199,7 +193,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
         </div>
       )}
 
-      {/* Frameless Tasks by Locality */}
+      {/* Tasks by Locality */}
       <div className="space-y-8">
         {Object.entries(groupedByLocality).map(([locality, localityTasks]) => (
           <div key={locality} className="space-y-4">
@@ -214,26 +208,46 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
                   <div className="flex-1">
                     <div className="flex items-center gap-3 flex-wrap">
                       <h4 className="font-semibold">{task.pillarId}</h4>
-                      <Badge variant={task.status === 'Completed' ? 'default' : 'outline'}>{task.status}</Badge>
+                      <Badge variant={isTaskDone(task.status) ? 'default' : 'outline'}>{task.status}</Badge>
                       {task.assignedTo && (
                         <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
-                          <UserPlus className="h-3 w-3 mr-1" /> {task.assignedTo}
+                          <UserPlus className="h-3 w-3 mr-1" />
+                          {task.assignedTo}
                         </Badge>
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 mt-1 flex items-center gap-1"><MapPin className="h-5 w-5" /> {task.address}</p>
-                    <p className="text-xs text-gray-500 mt-1">Due: {new Date(task.dueDate).toLocaleDateString()}</p>
+                    <p className="text-sm text-gray-600 mt-1 flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {task.address}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Due: {new Date(task.dueDate).toLocaleDateString()}
+                    </p>
                   </div>
+
                   <div className="flex gap-2">
-                    {isSupervisorOrAbove && task.status !== 'Completed' && (
-                      <Button onClick={() => handleAssignClick(task)} variant="outline" size="sm">Assign</Button>
+                    {isSupervisorOrAbove && onAssignTask && !isTaskDone(task.status) && (
+                      <Button onClick={() => handleAssignClick(task)} variant="outline" size="sm">
+                        {task.assignedTo ? 'Reassign' : 'Assign'}
+                      </Button>
                     )}
-                    <Button onClick={() => onStartAudit(task.id)} disabled={task.status === 'Completed'} size="sm">
-                      {task.status === 'Completed' ? 'Completed' : 'Start Audit'}
+
+                    <Button
+                      onClick={() => onStartAudit(task.id)}
+                      disabled={isTaskDone(task.status)}
+                      size="sm"
+                    >
+                      {isTaskDone(task.status)
+                        ? task.status
+                        : task.status === 'In Progress'
+                        ? 'Continue'
+                        : 'Start Audit'}
                     </Button>
-                    {task.status === 'Completed' && (
+
+                    {isTaskDone(task.status) && (
                       <Button onClick={() => onViewAIResult(task.id)} variant="outline" size="sm">
-                        <Eye className="h-4 w-4 mr-1" /> AI Result
+                        <Eye className="h-4 w-4 mr-1" />
+                        View AI Result
                       </Button>
                     )}
                   </div>
@@ -256,14 +270,21 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
                 <p className="text-sm font-medium">{selectedTask.pillarId}</p>
                 <p className="text-xs text-gray-600 mt-1">{selectedTask.location}</p>
               </div>
-              <Select value={selectedTechnicianId} onValueChange={setSelectedTechnicianId}>
-                <SelectTrigger><SelectValue placeholder="Choose a technician..." /></SelectTrigger>
-                <SelectContent>
-                  {technicians?.filter(t => t.role === 'technician' && t.isActive).map((tech) => (
-                    <SelectItem key={tech.id} value={tech.id}>{tech.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div>
+                <Label htmlFor="technician">Select Technician</Label>
+                <Select value={selectedTechnicianId} onValueChange={setSelectedTechnicianId}>
+                  <SelectTrigger id="technician">
+                    <SelectValue placeholder="Choose a technician..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {technicians?.filter(t => t.role === 'technician' && t.isActive).map((tech) => (
+                      <SelectItem key={tech.id} value={tech.employeeId}>
+                        {tech.name} ({tech.employeeId})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -274,31 +295,36 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
 
       {/* Create Task Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader><DialogTitle>Create New Task</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Create New Task</DialogTitle>
+            <DialogDescription>
+              The technician will be auto-assigned based on the pillar's locality.
+            </DialogDescription>
+          </DialogHeader>
           <div className="grid gap-4 py-4">
-            <Input placeholder="Task ID" value={newTask.id} onChange={(e) => setNewTask({...newTask, id: e.target.value})} />
-            <Input placeholder="Pillar ID (FP-2026-XXX)" value={newTask.pillarId} onChange={(e) => setNewTask({...newTask, pillarId: e.target.value})} />
-            <Input placeholder="Location Name" value={newTask.location} onChange={(e) => setNewTask({...newTask, location: e.target.value})} />
-            <Input placeholder="Full Address" value={newTask.address} onChange={(e) => setNewTask({...newTask, address: e.target.value})} />
-            <Select value={newTask.locality} onValueChange={(v) => setNewTask({...newTask, locality: v})}>
-              <SelectTrigger><SelectValue placeholder="Locality" /></SelectTrigger>
-              <SelectContent>
-                {[...new Set(tasks.map(t => t.locality))].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <div className="grid grid-cols-2 gap-2">
-              <Input type="number" placeholder="Lat" value={newTask.lat} onChange={(e) => setNewTask({...newTask, lat: e.target.value})} />
-              <Input type="number" placeholder="Lng" value={newTask.lng} onChange={(e) => setNewTask({...newTask, lng: e.target.value})} />
+            <div className="grid gap-2">
+              <Label htmlFor="pillarId">Pillar ID</Label>
+              <Input
+                id="pillarId"
+                value={newTask.pillarId}
+                onChange={(e) => setNewTask({ ...newTask, pillarId: e.target.value })}
+                placeholder="FP-2026-999"
+              />
             </div>
-            <Select value={newTask.assignedTo} onValueChange={(v) => setNewTask({...newTask, assignedTo: v})}>
-              <SelectTrigger><SelectValue placeholder="Assign Technician" /></SelectTrigger>
-              <SelectContent>
-                {technicians?.filter(t => t.role === 'technician').map(tech => <SelectItem key={tech.id} value={tech.name}>{tech.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <div className="grid gap-2">
+              <Label htmlFor="dueDate">Due Date</Label>
+              <Input
+                id="dueDate"
+                type="datetime-local"
+                value={newTask.dueDate.slice(0, 16)}
+                onChange={(e) => setNewTask({ ...newTask, dueDate: new Date(e.target.value).toISOString() })}
+              />
+            </div>
           </div>
-          <DialogFooter><Button onClick={handleCreateTask}>Create Task</Button></DialogFooter>
+          <DialogFooter>
+            <Button onClick={handleCreateTask}>Create Task</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

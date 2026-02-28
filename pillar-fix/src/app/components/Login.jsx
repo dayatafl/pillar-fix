@@ -5,7 +5,8 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Button } from '@/app/components/ui/button';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import logo from './logo/FINAL.svg';
+import logo from './logo/FINAL.svg'
+import api from "@/app/api";
 
 export function Login({ onLogin }) {
   const [emailOrUsername, setEmailOrUsername] = useState('');
@@ -13,49 +14,27 @@ export function Login({ onLogin }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-
-    if (!emailOrUsername || !password) {
-      setError('Email/username or Password required');
-      return;
-    }
-
+    setError("");
+    if (!emailOrUsername || !password) { setError("All fields required"); return; }
     setLoading(true);
 
-    // Simulate login API call
-    setTimeout(() => {
-      const mockUsers = {
-        'admin@tnb.com': {
-          password: 'admin123',
-          user: { id: '1', name: 'Admin User', role: 'admin' },
-        },
-        'manager@tnb.com': {
-          password: 'manager123',
-          user: { id: '2', name: 'Sarah Johnson', role: 'manager' },
-        },
-        'supervisor@tnb.com': {
-          password: 'super123',
-          user: { id: '3', name: 'John Smith', role: 'supervisor' },
-        },
-        'tech@tnb.com': {
-          password: 'tech123',
-          user: { id: '4', name: 'Ahmad Rahman', role: 'technician' },
-        },
-      };
-
-      const userEntry = mockUsers[emailOrUsername.toLowerCase()];
-
-      if (!userEntry || userEntry.password !== password) {
-        setError('Invalid email/username or password');
-        setLoading(false);
-        return;
+    try {
+      const { data } = await api.post("/users/login", {
+        email: emailOrUsername,
+        password: password,
+      });
+      if (!data.exists) {
+        setError("Invalid credentials");
+      } else {
+        onLogin(data.user);
       }
-
-      onLogin(userEntry.user);
+    } catch (err) {
+      setError(err.response?.data?.detail || "Server error");
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   return (

@@ -104,6 +104,7 @@ export const createMockMaintenanceItem = (submission, approvalData) => {
   return {
     id: Date.now().toString(),
     pillarId: submission.pillarId,
+    taskId: submission.taskId,
     location: submission.location,
     address: submission.address,
     coordinates: submission.coordinates,
