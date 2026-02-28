@@ -38,10 +38,16 @@ export default function App() {
   const [selectedSubmissionId, setSelectedSubmissionId] = useState(null);
   const [selectedMaintenanceId, setSelectedMaintenanceId] = useState(null);
 
+  const fetchMaintenance = () => {
+    api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
+  };
+
   useEffect(() => {
     if (!isAuthenticated) return;
     api.get("/tasks").then(({ data }) => setAuditTasks(data)).catch(console.error);
     api.get("/users").then(({ data }) => setUsers(data)).catch(console.error);
+    api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
+    api.get("/submissions").then(({ data }) => setSubmissions(data)).catch(console.error);
   }, [isAuthenticated]);
 
 
@@ -97,9 +103,16 @@ export default function App() {
   };
 
   const handleSubmitAudit = (submission) => {
-    setSubmissions(prev => [submission, ...prev]);
+    setSubmissions(prev => {
+      // Replace existing submission for the same task if re-submitting, otherwise prepend
+      const exists = prev.find(s => s.taskId === submission.taskId);
+      if (exists) {
+        return prev.map(s => s.taskId === submission.taskId ? submission : s);
+      }
+      return [submission, ...prev];
+    });
     setAuditTasks(prev => prev.map(t =>
-      t.id === submission.taskId ? { ...t, status: 'Completed' } : t
+      t.id === submission.taskId ? { ...t, status: 'Submitted' } : t
     ));
     setCurrentView('tech-dashboard');
   };
@@ -127,27 +140,35 @@ export default function App() {
   };
 
   const handleApproveForMaintenance = (submissionId, approvalData) => {
-  const submission = submissions.find(s => s.id === submissionId);
-  if (submission) {
-  const maintenanceItem = createMockMaintenanceItem(submission, approvalData);
-  setMaintenanceItems(prev => [maintenanceItem, ...prev]);
-  setSubmissions(prev => prev.map(s =>
-  s.id === submissionId
-  ? { ...s, validated: true, validationStatus: 'Approved' }
-  : s
-  ));
-  }
-  setCurrentView('supervisor-validation');  // ← go back to Validation, not Maintenance
+    setSubmissions(prev => prev.map(s =>
+      s.id === submissionId
+        ? { 
+            ...s, 
+            validated: true, 
+            validationStatus: 'Approved',
+            approvalData: approvalData
+          }
+        : s
+    ));
+    // Update task status to Validated
+    const submission = submissions.find(s => s.id === submissionId);
+    if (submission) {
+      setAuditTasks(prev => prev.map(t =>
+        t.id === submission.taskId ? { ...t, status: 'Validated' } : t
+      ));
+    }
+    fetchMaintenance();
+    setCurrentView('supervisor-validation');
   };
 
   const handleRejectSubmission = (submissionId, reason) => {
-  setSubmissions(prev => prev.map(s =>
-  s.id === submissionId
-  ? { ...s, validated: true, validationStatus: 'Rejected', rejectionReason: reason }
-  : s
-  ));
-  toast.info('Submission rejected');
-  setCurrentView('supervisor-validation');
+    setSubmissions(prev => prev.map(s =>
+      s.id === submissionId
+        ? { ...s, validated: true, validationStatus: 'Rejected', rejectionReason: reason }
+        : s
+        ));
+      toast.info('Submission rejected');
+    setCurrentView('supervisor-validation');
   };
 
   const handleViewMaintenanceDetail = (itemId) => {

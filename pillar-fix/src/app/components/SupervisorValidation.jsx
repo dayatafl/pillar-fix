@@ -116,7 +116,7 @@ export function SupervisorValidation({ submissions, onReview }) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pendingReview.length}</div>
+            <div className="text-2xl font-bold">{pendingReviewCount}</div>
           </CardContent>
         </Card>        
 

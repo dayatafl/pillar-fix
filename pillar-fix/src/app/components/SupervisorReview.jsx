@@ -15,7 +15,7 @@ import { Badge } from '@/app/components/ui/badge';
 import { toast } from 'sonner';
 import api from "@/app/api";
 
-export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
+export function SupervisorReview({ submission, currentUser, onBack, onApprove, onReject }) {
   const isApproved = submission.validationStatus === 'Approved';
   const isRejected = submission.validationStatus === 'Rejected';
   const isValidated = isApproved || isRejected;
@@ -39,18 +39,29 @@ export function SupervisorReview({ submission, onBack, onApprove, onReject }) {
 
   const handleApprove = async () => {
     if (!notes.trim()) { toast.error("Supervisor notes required"); return; }
+
+    const cost = parseFloat(estimatedCost);
+    if (isNaN(cost)) {
+      toast.error("Please enter a valid estimated cost");
+      return;
+    }
+
     try {
-      await api.put(`/tasks/${submission.taskId}/validate`, {
+      const response = await api.put(`/tasks/${submission.taskId}/validate`, {
         validation_status: "Approved",
         severity_validation: severity,
         priority_validation: priority,
-        cost_estimation: parseFloat(estimatedCost),
+        cost_estimation: cost,
         remarks: notes,
         validation_by: currentUser.employeeId,
       });
-      onApprove(submission.id, { severity, priority, estimatedCost: parseFloat(estimatedCost), notes });
+
+      console.log("Approve response:", response); // <-- add this
+
+      onApprove(submission.id, { severity, priority, cost, notes });
       toast.success("Maintenance approved");
     } catch (err) {
+      console.error("Approve error:", err); // <-- and this
       toast.error(err.response?.data?.detail || "Validation failed");
     }
   };

@@ -64,6 +64,7 @@ class UserUpdate(BaseModel):
 class TaskCreate(BaseModel):
     pillar_id: str
     due_date: datetime
+    created_by: str
 
 
 class TaskReassign(BaseModel):
@@ -89,11 +90,13 @@ class TaskValidation(BaseModel):
 
 
 class TaskMaintenance(BaseModel):
-    maintenance_status: str   # fixed spelling
-    work_log: dict            # { action: str, notes: str, images: list[str] }
-    completion_evidence: str  # URL / base64 of the completion image
-    maintenance_validate_by: str  # fixed spelling – employeeId
-
+    maintenance_status: str
+    action: str
+    notes: str
+    images: Optional[list] = []
+    logged_by: str                          # employeeId of whoever is logging (technician or supervisor)
+    completion_evidence: Optional[str] = ""
+    maintenance_validate_by: Optional[str] = None  # only set when supervisor marks complete
 
 # ---------------------------------------------------------------------------
 # AI detection stub
@@ -148,7 +151,7 @@ def compute_overall_risk(detections: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 @app.post("/users/login")
-def login_user(login: LoginRequest, db: db_dependency):
+async def login_user(login: LoginRequest, db: db_dependency):
     """
     Frontend sends: { email, username }
     NOTE: The current frontend uses a hardcoded mock — no real API call.
@@ -183,7 +186,7 @@ def login_user(login: LoginRequest, db: db_dependency):
 # ---------------------------------------------------------------------------
 
 @app.get("/users")
-def get_users(db: db_dependency):
+async def get_users(db: db_dependency):
     """
     UserManagement component expects each user to have:
       { id, name, email, username, employeeId, role, isActive }
@@ -206,7 +209,7 @@ def get_users(db: db_dependency):
 
 
 @app.post("/users")
-def create_user(data: UserCreate, db: db_dependency):
+async def create_user(data: UserCreate, db: db_dependency):
     """
     Called by handleCreateUser in UserManagement.jsx.
     Sends: { name, email, username, employeeId, role, password, locality }
@@ -250,7 +253,7 @@ def create_user(data: UserCreate, db: db_dependency):
     }
 
 @app.put("/users/{user_id}")
-def update_user(user_id: int, data: UserUpdate, db: db_dependency):
+async def update_user(user_id: int, data: UserUpdate, db: db_dependency):
     """
     Called by handleUpdateUser in UserManagement.jsx.
     Sends: { name, email, username, employeeId, role, locality }
@@ -293,7 +296,7 @@ def update_user(user_id: int, data: UserUpdate, db: db_dependency):
 
 
 @app.patch("/users/{user_id}/status")
-def toggle_user_status(user_id: int, db: db_dependency):
+async def toggle_user_status(user_id: int, db: db_dependency):
     """
     Called by handleToggleUserStatus (the Switch toggle) in UserManagement.jsx.
     Flips isActive between True and False.
@@ -313,7 +316,7 @@ def toggle_user_status(user_id: int, db: db_dependency):
 
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: int, db: db_dependency):
+async def delete_user(user_id: int, db: db_dependency):
     """
     Called by confirmDeleteUser in UserManagement.jsx.
     Hard-deletes the user row. Consider soft-delete (isActive=False) for production.
@@ -333,7 +336,7 @@ def delete_user(user_id: int, db: db_dependency):
 # ---------------------------------------------------------------------------
 
 @app.get("/tasks")
-def get_tasks(db: db_dependency):
+async def get_tasks(db: db_dependency):
     """
     TechnicianDashboard / EnhancedMapView expect each task to have:
       { id, pillarId, location, address, locality, coordinates, assignedTo, status, dueDate, createdAt }
@@ -375,7 +378,7 @@ def get_tasks(db: db_dependency):
 
 
 @app.post("/tasks")
-def create_task(task: TaskCreate, db: db_dependency):
+async def create_task(task: TaskCreate, db: db_dependency):
     """
     Auto-assigns the first available technician in the pillar's locality.
     Frontend 'Create Task' dialog currently works locally (mock) —
@@ -402,7 +405,7 @@ def create_task(task: TaskCreate, db: db_dependency):
         pillar_id=task.pillar_id,
         due_date=task.due_date,
         assigned_to=technician.employeeId,
-        created_by=technician.employeeId,   # who created this task record
+        created_by=task.created_by,   # who created this task record
         task_status="Pending",
         created_date=datetime.utcnow(),
         updated_date=datetime.utcnow(),
@@ -421,7 +424,7 @@ def create_task(task: TaskCreate, db: db_dependency):
 
 
 @app.put("/tasks/{task_id}/reassign")
-def reassign_task(task_id: int, data: TaskReassign, db: db_dependency):
+async def reassign_task(task_id: int, data: TaskReassign, db: db_dependency):
     task = db.query(Task).filter(Task.task_id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -453,7 +456,7 @@ def reassign_task(task_id: int, data: TaskReassign, db: db_dependency):
 
 
 @app.put("/tasks/{task_id}/submit")
-def submit_task(task_id: int, data: TaskSubmit, db: db_dependency):
+async def submit_task(task_id: int, data: TaskSubmit, db: db_dependency):
     """
     AuditForm submits 4 base64 images + GPS coordinates.
     After saving, runs AI detection and stores results in Photo + Detection tables.
@@ -547,7 +550,7 @@ def submit_task(task_id: int, data: TaskSubmit, db: db_dependency):
 
 
 @app.get("/detection/{task_id}")
-def get_detection(task_id: int, db: db_dependency):
+async def get_detection(task_id: int, db: db_dependency):
     """
     Returns detection results for a previously submitted task.
     Shape matches DetectionResults component expectations.
@@ -603,7 +606,7 @@ def get_detection(task_id: int, db: db_dependency):
 
 
 @app.put("/tasks/{task_id}/validate")
-def validate_task(task_id: int, data: TaskValidation, db: db_dependency):
+async def validate_task(task_id: int, data: TaskValidation, db: db_dependency):
     """
     SupervisorReview calls this when approving a submission.
     Stores severity, priority, cost, remarks, who validated.
@@ -622,36 +625,258 @@ def validate_task(task_id: int, data: TaskValidation, db: db_dependency):
     task.updated_date = datetime.utcnow()
 
     db.commit()
+    db.refresh(task)
 
     return {"message": "Task validated"}
 
 
-@app.put("/tasks/{task_id}/maintenance")
-def maintenance_update(task_id: int, data: TaskMaintenance, db: db_dependency):
+@app.get("/submissions")
+async def get_submissions(db: db_dependency):
     """
-    MaintenanceDetail calls this to log work and update maintenance status.
-    work_log is a JSON object: { action, notes, images[] }
+    Returns all tasks that have been submitted (task_status in Submitted/Validated/Completed),
+    reconstructed in the shape the frontend's `submissions` state expects:
+    {
+      id, taskId, pillarId, location, address, coordinates, images,
+      submittedBy, submittedAt, detectionStatus, detectionResults,
+      overallRisk, validationStatus, sentToSupervisor,
+      validated, approvalData
+    }
+    This allows the frontend to re-hydrate the submissions list after a
+    page refresh or logout/login without losing audit history.
+    """
+    Technician = aliased(User)
+
+    rows = (
+        db.query(
+            Task.task_id,
+            Task.pillar_id,
+            Task.task_status,
+            Task.image_1,
+            Task.image_2,
+            Task.image_3,
+            Task.image_4,
+            Task.user_current_location,
+            Task.updated_date,
+            Task.validation_status,
+            Task.severity_validation,
+            Task.priority_validation,
+            Task.cost_estimation,
+            Task.remarks,
+            Task.validation_by,
+            Pillar.address,
+            Pillar.coordinates,
+            Pillar.locality,
+            Technician.name.label("technician_name"),
+        )
+        .outerjoin(Pillar, Pillar.pillarId == Task.pillar_id)
+        .outerjoin(Technician, Technician.employeeId == Task.assigned_to)
+        .filter(Task.task_status.in_(["Submitted", "Validated", "Completed"]))
+        .all()
+    )
+
+    result = []
+    for r in rows:
+        # Fetch photo and detection boxes
+        photo = db.query(Photo).filter(Photo.task_id == r.task_id).first()
+        boxes = db.query(Detection).filter(Detection.task_id == r.task_id).all()
+
+        all_detections = [
+            {
+                "x": b.x, "y": b.y, "width": b.width, "height": b.height,
+                "faulty_type": b.faulty_type, "confidence_level": b.confidence_level,
+                "image_index": b.image_index,
+            }
+            for b in boxes
+        ]
+        overall_risk = compute_overall_risk(all_detections)
+
+        sides = ["front", "right", "back", "left"]
+        images_data = [r.image_1, r.image_2, r.image_3, r.image_4]
+
+        detection_results = [
+            {
+                "imageUrl": images_data[i],
+                "side": sides[i],
+                "boundingBoxes": [
+                    {
+                        "x": d["x"], "y": d["y"], "width": d["width"], "height": d["height"],
+                        "faultType": d["faulty_type"], "confidence": d["confidence_level"],
+                    }
+                    for d in all_detections if d["image_index"] == i + 1
+                ],
+                "overallRisk": overall_risk,
+            }
+            for i in range(4)
+        ]
+
+        is_validated = r.validation_status in ("Approved", "Rejected")
+        approval_data = None
+        if r.validation_status == "Approved":
+            approval_data = {
+                "severity": r.severity_validation,
+                "priority": r.priority_validation,
+                "costEstimation": r.cost_estimation,
+                "remarks": r.remarks,
+                "validatedBy": r.validation_by,
+            }
+
+        result.append({
+            "id": photo.photo_id if photo else str(r.task_id),
+            "taskId": str(r.task_id),
+            "pillarId": r.pillar_id,
+            "location": r.address,
+            "address": r.address,
+            "locality": r.locality,
+            "coordinates": r.user_current_location or r.coordinates,
+            "images": [
+                {"side": sides[i], "imageUrl": images_data[i]}
+                for i in range(4)
+            ],
+            "submittedBy": r.technician_name,
+            "submittedAt": r.updated_date.isoformat() if r.updated_date else None,
+            "detectionStatus": "Completed",
+            "detectionResults": detection_results,
+            "overallRisk": overall_risk,
+            "validationStatus": r.validation_status or "Pending",
+            "sentToSupervisor": True,   # already submitted = already visible to supervisor
+            "validated": is_validated,
+            "approvalData": approval_data,
+        })
+
+    return result
+
+
+@app.put("/tasks/{task_id}/maintenance")
+async def update_maintenance(task_id: int, data: TaskMaintenance, db: db_dependency):
+    """
+    Single endpoint for all maintenance updates.
+    Appends a new entry to work_log JSON array, then updates status fields.
+    - Technician adding work log: maintenance_status = "In Progress", logged_by = tech employeeId
+    - Supervisor completing:      maintenance_status = "Completed",   maintenance_validate_by = supervisor employeeId
     """
     task = db.query(Task).filter(Task.task_id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Append new log entry to existing list
-    existing_logs = task.work_log or []
-    new_log = {
-        **data.work_log,
+    # Guard: work_log may be None, a dict (bad old data), or already a list
+    raw = task.work_log
+    if isinstance(raw, list):
+        existing_logs = raw
+    elif isinstance(raw, dict):
+        existing_logs = [raw]   # migrate old single-dict format to list
+    else:
+        existing_logs = []
+
+    new_entry = {
+        "action": data.action,
+        "notes": data.notes,
+        "images": data.images,
+        "logged_by": data.logged_by,
+        "logged_by_name": db.query(User.name).filter(User.employeeId == data.logged_by).scalar(),
         "timestamp": datetime.utcnow().isoformat(),
     }
-    task.work_log = existing_logs + [new_log]
+    task.work_log = existing_logs + [new_entry]
 
     task.maintenance_status = data.maintenance_status
-    task.completion_evidence = data.completion_evidence
-    task.maintenance_validate_by = data.maintenance_validate_by
-    task.updated_date = datetime.utcnow()
+    task.logged_by = data.logged_by
 
+    if data.completion_evidence:
+        task.completion_evidence = data.completion_evidence
+    if data.maintenance_validate_by:
+        task.maintenance_validate_by = data.maintenance_validate_by
     if data.maintenance_status == "Completed":
         task.task_status = "Completed"
 
+    task.updated_date = datetime.utcnow()
     db.commit()
+    db.refresh(task)
 
-    return {"message": "Maintenance updated"}
+    return {
+        "message": "Maintenance updated",
+        "task_id": task_id,
+        "maintenance_status": task.maintenance_status,
+        "work_log": task.work_log
+    }
+
+
+@app.get("/maintenance")
+async def get_maintenance(db: db_dependency):
+    """
+    Returns all tasks with validation_status = 'Approved' 
+    in the shape MaintenanceList expects.
+    """
+    Technician = aliased(User)
+
+    rows = (
+        db.query(
+            Task.task_id,
+            Task.pillar_id,
+            Task.task_status,
+            Task.maintenance_status,
+            Task.severity_validation,
+            Task.priority_validation,
+            Task.cost_estimation,
+            Task.remarks,
+            Task.work_log,
+            Task.due_date,
+            Task.updated_date,
+            Task.image_1,
+            Task.image_2,
+            Task.image_3,
+            Task.image_4,
+            Task.user_current_location,
+            Pillar.address,
+            Pillar.coordinates,
+            Technician.name.label("technician_name"),
+        )
+        .outerjoin(Pillar, Pillar.pillarId == Task.pillar_id)
+        .outerjoin(Technician, Technician.employeeId == Task.assigned_to)
+        .filter(Task.validation_status == "Approved")
+        .all()
+    )
+
+    result = []
+    for r in rows:
+        # Fetch detections for bounding boxes per image
+        boxes = db.query(Detection).filter(Detection.task_id == r.task_id).all()
+        faults = list(set(b.faulty_type for b in boxes))
+
+        sides = ["front", "right", "back", "left"]
+        images_data = [r.image_1, r.image_2, r.image_3, r.image_4]
+
+        previous_detections = [
+            {
+                "side": sides[i],
+                "imageUrl": images_data[i],
+                "boundingBoxes": [
+                    {
+                        "x": b.x, "y": b.y, "width": b.width, "height": b.height,
+                        "faultType": b.faulty_type, "confidence": b.confidence_level,
+                    }
+                    for b in boxes if b.image_index == i + 1
+                ],
+            }
+            for i in range(4)
+            if images_data[i]   # only include sides that have an image
+        ]
+
+        result.append({
+            "id": str(r.task_id),
+            "taskId": str(r.task_id),
+            "pillarId": r.pillar_id,
+            "address": r.address,
+            "coordinates": r.user_current_location or r.coordinates,
+            "severity": r.severity_validation,
+            "priority": r.priority_validation,
+            "estimatedCost": r.cost_estimation or 0,
+            "notes": r.remarks,
+            "faults": faults,
+            "status": r.maintenance_status or "Pending",
+            "workLogs": r.work_log or [],
+            "assignedTo": r.technician_name,
+            "scheduledDate": r.due_date.isoformat() if r.due_date else None,
+            "createdAt": r.updated_date.isoformat() if r.updated_date else None,
+            "previousDetections": previous_detections,
+        })
+
+    return result

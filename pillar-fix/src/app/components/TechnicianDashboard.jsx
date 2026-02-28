@@ -21,36 +21,35 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
   const [isCalendarFilterOpen, setIsCalendarFilterOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newTask, setNewTask] = useState({
-    id: '',
     pillarId: '',
-    location: '',
-    address: '',
-    locality: '',
-    lat: '',
-    lng: '',
-    assignedTo:'',
-    status: 'Pending',
     dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
-    createdAt: new Date().toISOString(),
-
   });
 
   const handleCreateTask = async () => {
+    if (!newTask.pillarId || !newTask.dueDate) {
+      toast.error('Pillar ID and due date are required');
+      return;
+    }
+
     try {
-      await api.post("/tasks", {
+      await api.post('/tasks', {
         pillar_id: newTask.pillarId,
         due_date: newTask.dueDate,
+        created_by: currentUser?.employeeId,
       });
-      const { data } = await api.get("/tasks");
+
+      // Refresh the full task list from server
+      const { data } = await api.get('/tasks');
       onUpdateTasks(data);
-      toast.success(`Task ${newTask.pillarId} created`);
+
+      toast.success(`Task for ${newTask.pillarId} created successfully`);
       setIsCreateDialogOpen(false);
-      setNewTask({ id:"", pillarId:"", location:"", address:"", locality:"",
-        lat:"", lng:"", assignedTo:"", status:"Pending",
-        dueDate: new Date(Date.now() + 86400000*5).toISOString(),
-        createdAt: new Date().toISOString() });
+      setNewTask({
+        pillarId: '',
+        dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
+      });
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to create task");
+      toast.error(err.response?.data?.detail || 'Failed to create task');
     }
   };
 
@@ -95,11 +94,15 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
     setDateRange({});
   };
 
+  // Normalize status: treat Submitted/Validated/Completed all as "done" for stats
+  const isTaskDone = (status) => ['Completed', 'Submitted', 'Validated'].includes(status);
+  const isTaskInProgress = (status) => status === 'In Progress';
+
   const stats = {
     total: filteredTasks.length,
     pending: filteredTasks.filter(t => t.status === 'Pending').length,
-    inProgress: filteredTasks.filter(t => t.status === 'In Progress').length,
-    completed: filteredTasks.filter(t => t.status === 'Completed').length,
+    inProgress: filteredTasks.filter(t => isTaskInProgress(t.status)).length,
+    completed: filteredTasks.filter(t => isTaskDone(t.status)).length,
   };
 
   const groupedByLocality = filteredTasks.reduce((acc, task) => {
@@ -322,7 +325,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
 
                     <div className="flex gap-2">
                       {/* Show assign button for supervisors/managers/admins */}
-                      {isSupervisorOrAbove && onAssignTask && task.status !== 'Completed' && (
+                      {isSupervisorOrAbove && onAssignTask && !isTaskDone(task.status) && (
                         <Button
                           onClick={() => handleAssignClick(task)}
                           variant="outline"
@@ -334,18 +337,18 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
 
                       <Button
                         onClick={() => onStartAudit(task.id)}
-                        disabled={task.status === 'Completed'}
+                        disabled={isTaskDone(task.status)}
                         size="sm"
                       >
-                        {task.status === 'Completed'
-                          ? 'Completed'
+                        {isTaskDone(task.status)
+                          ? task.status
                           : task.status === 'In Progress'
                           ? 'Continue'
                           : 'Start Audit'}
                       </Button>
 
-                      {/* Show view AI result button for completed tasks */}
-                      {task.status === 'Completed' && (
+                      {/* Show view AI result button for submitted/validated/completed tasks */}
+                      {isTaskDone(task.status) && (
                         <Button
                           onClick={() => onViewAIResult(task.id)}
                           variant="outline"
@@ -387,7 +390,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
                   </SelectTrigger>
                   <SelectContent>
                     {technicians?.filter(t => t.role === 'technician' && t.isActive).map((tech) => (
-                      <SelectItem key={tech.id} value={tech.id}>
+                      <SelectItem key={tech.id} value={tech.employeeId}>
                         {tech.name} ({tech.employeeId})
                       </SelectItem>
                     ))}
@@ -410,25 +413,16 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
 
       {/* Add new task dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Create New Task</DialogTitle>
             <DialogDescription>
-              Add a new task to the PillarFix system. All fields are required.
+              The technician will be auto-assigned based on the pillar's locality.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="id">Id</Label>
-              <Input
-                id="id"
-                value={newTask.id}
-                onChange={(e) => setNewTask({ ...newTask, id: e.target.value })}
-                placeholder="set ID"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="pillarId">Pillar Id</Label>
+              <Label htmlFor="pillarId">Pillar ID</Label>
               <Input
                 id="pillarId"
                 value={newTask.pillarId}
@@ -437,79 +431,13 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="location">Location</Label>
+              <Label htmlFor="dueDate">Due Date</Label>
               <Input
-                id="location"
-                value={newTask.location}
-                onChange={(e) => setNewTask({ ...newTask, location: e.target.value })}
-                placeholder="location"
+                id="dueDate"
+                type="datetime-local"
+                value={newTask.dueDate.slice(0, 16)}
+                onChange={(e) => setNewTask({ ...newTask, dueDate: new Date(e.target.value).toISOString() })}
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="address">Address</Label>
-              <Input
-                id="address"
-                value={newTask.address}
-                onChange={(e) => setNewTask({ ...newTask, address: e.target.value })}
-                placeholder="address"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="locality">Locality</Label>
-              <Select
-                value={newTask.locality}
-                onValueChange={(value) => setNewTask({ ...newTask, locality: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[...new Set(tasks.map(task => task.locality))].sort().map((locality) => (
-                    <SelectItem key={locality} value={locality}>
-                      {locality}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="grid gap-2">
-                <Label htmlFor="lat">Latitude</Label>
-                <Input
-                  id="lat"
-                  type="number"
-                  step="any"
-                  value={newTask.lat}
-                  onChange={(e) => setNewTask({ ...newTask, lat: e.target.value })}
-                  placeholder="3.1185"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="lng">Longitude</Label>
-                <Input
-                  id="lng"
-                  type="number"
-                  step="any"
-                  value={newTask.lng}
-                  onChange={(e) => setNewTask({ ...newTask, lng: e.target.value })}
-                  placeholder="101.6765"
-                />
-              </div>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="assignedTo">Select Technician</Label>
-              <Select value={newTask.assignedTo} onValueChange={(value) => setNewTask({ ...newTask, assignedTo: value })}>
-                <SelectTrigger id="assignedTo">
-                  <SelectValue placeholder="Choose a technician..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {technicians?.filter(t => t.role === 'technician' && t.isActive).map((tech) => (
-                    <SelectItem key={tech.id} value={tech.name}>
-                      {tech.name} ({tech.employeeId}) 
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
           </div>
           <DialogFooter>

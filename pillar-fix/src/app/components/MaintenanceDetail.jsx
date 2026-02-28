@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { ArrowLeft, Upload, Plus, Calendar, Check, Clock } from 'lucide-react';
+import api from '@/app/api';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
@@ -8,7 +9,7 @@ import { Label } from '@/app/components/ui/label';
 import { Input } from '@/app/components/ui/input';
 import { toast } from 'sonner';
 
-export function MaintenanceDetail({ item, onBack, onUpdateWorkLog, onSubmitCompletion, onUpdateStatus }) {
+export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, onSubmitCompletion, onUpdateStatus }) {
   const [workLogAction, setWorkLogAction] = useState('');
   const [workLogNotes, setWorkLogNotes] = useState('');
   const [workLogImages, setWorkLogImages] = useState([]);
@@ -23,20 +24,22 @@ export function MaintenanceDetail({ item, onBack, onUpdateWorkLog, onSubmitCompl
     try {
       await api.put(`/tasks/${item.taskId}/maintenance`, {
         maintenance_status: "In Progress",
-        work_log: { action: workLogAction, notes: workLogNotes, images: workLogImages },
-        completion_evidence: "",
+        action: workLogAction,
+        notes: workLogNotes,
+        images: workLogImages,
         logged_by: currentUser.employeeId,
       });
       onUpdateWorkLog(item.id, {
         id: Date.now().toString(), timestamp: new Date().toISOString(),
-        technician: item.assignedTo, action: workLogAction, notes: workLogNotes,
+        logged_by: currentUser.employeeId, logged_by_name: currentUser.name, action: workLogAction, notes: workLogNotes,
         images: workLogImages.length > 0 ? workLogImages : undefined,
       });
       onUpdateStatus(item.id, "In Progress");
       setWorkLogAction(""); setWorkLogNotes(""); setWorkLogImages([]);
       toast.success("Work log saved");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Failed to save work log");
+      const detail = err.response?.data?.detail;
+      toast.error(Array.isArray(detail) ? detail.map(d => d.msg).join(', ') : detail || 'Failed to save work log');
     }
   };
 
@@ -58,14 +61,16 @@ export function MaintenanceDetail({ item, onBack, onUpdateWorkLog, onSubmitCompl
     try {
       await api.put(`/tasks/${item.taskId}/maintenance`, {
         maintenance_status: "Completed",
-        work_log: { action: "Completion evidence submitted",
-          notes: "Post-maintenance photos uploaded", images: completionImages },
+        action: "Completion evidence submitted",
+        notes: "Post-maintenance photos uploaded",
+        images: completionImages,
+        logged_by: currentUser.employeeId,
         completion_evidence: completionImages[0],
         maintenance_validate_by: currentUser.employeeId,
       });
       onSubmitCompletion(item.id, {
         id: Date.now().toString(), timestamp: new Date().toISOString(),
-        technician: item.assignedTo, images: completionImages,
+        technician: currentUser.name, images: completionImages,
       });
       setCompletionImages([]);
       toast.success("Completion submitted");
@@ -108,27 +113,32 @@ export function MaintenanceDetail({ item, onBack, onUpdateWorkLog, onSubmitCompl
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {item.previousDetections[0] && 
-                  ['front', 'right', 'back', 'left'].map((side) => {
-                    const detection = item.previousDetections.find(d => d.side === side);
-                    return (
-                      <div key={side} className="space-y-2">
-                        <p className="text-sm font-medium capitalize">{side}</p>
-                        {detection && (
-                          <>
-                            <img
-                              src={detection.imageUrl}
-                              alt={side}
-                              className="w-full h-32 object-cover rounded-lg border"
-                            />
-                            <p className="text-xs text-gray-600">
-                              {detection.boundingBoxes.length} fault(s)
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })
+                {item.previousDetections?.length > 0
+                  ? ['front', 'right', 'back', 'left'].map((side) => {
+                      const detection = item.previousDetections.find(d => d.side === side);
+                      return (
+                        <div key={side} className="space-y-2">
+                          <p className="text-sm font-medium capitalize">{side}</p>
+                          {detection && (
+                            <>
+                              <img
+                                src={detection.imageUrl}
+                                alt={side}
+                                className="w-full h-32 object-cover rounded-lg border"
+                              />
+                              <p className="text-xs text-gray-600">
+                                {detection.boundingBoxes?.length ?? 0} fault(s)
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })
+                  : (
+                    <p className="col-span-4 text-sm text-gray-500 text-center py-4">
+                      No detection images available
+                    </p>
+                  )
                 }
               </div>
               
@@ -165,7 +175,7 @@ export function MaintenanceDetail({ item, onBack, onUpdateWorkLog, onSubmitCompl
                           <p>{new Date(log.timestamp).toLocaleTimeString()}</p>
                         </div>
                       </div>
-                      <p className="text-xs text-gray-500 mt-2">By: {log.technician}</p>
+                      <p className="text-xs text-gray-500 mt-2">By: {log.logged_by_name}</p>
                       
                       {/* Display work log images if available */}
                       {log.images && log.images.length > 0 && (
@@ -416,7 +426,7 @@ export function MaintenanceDetail({ item, onBack, onUpdateWorkLog, onSubmitCompl
 
               <div>
                 <Label className="text-gray-600">Estimated Cost</Label>
-                <p className="font-medium text-lg">RM{item.estimatedCost.toLocaleString()}</p>
+                <p className="font-medium text-lg">RM{(item.estimatedCost ?? 0).toLocaleString()}</p>
               </div>
 
               {item.scheduledDate && (
@@ -464,7 +474,9 @@ export function MaintenanceDetail({ item, onBack, onUpdateWorkLog, onSubmitCompl
               <div>
                 <Label className="text-gray-600">Coordinates</Label>
                 <p className="font-medium">
-                  {item.coordinates.lat.toFixed(6)}, {item.coordinates.lng.toFixed(6)}
+                  {item.coordinates
+                    ? `${item.coordinates.lat.toFixed(6)}, ${item.coordinates.lng.toFixed(6)}`
+                    : 'Not available'}
                 </p>
               </div>
             </CardContent>
