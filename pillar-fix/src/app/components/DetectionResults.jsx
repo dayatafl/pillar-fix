@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, AlertTriangle, Send, CheckSquare } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Send, Check } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
@@ -80,7 +80,7 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
               className="bg-green-600 hover:bg-green-700 text-white cursor-not-allowed"
               disabled
             >
-              <CheckSquare className="h-5 w-5 mr-2" />
+              <Check className="h-5 w-5 mr-2" />
               Validated by Supervisor
             </Button>
           )}
@@ -94,7 +94,7 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
               className="bg-green-600 text-white cursor-not-allowed"
               disabled
             >
-              <CheckSquare className="h-5 w-5 mr-2" />
+              <Check className="h-5 w-5 mr-2" />
               Validated by Supervisor
             </Button>
           ) : submission.sentToSupervisor ? (

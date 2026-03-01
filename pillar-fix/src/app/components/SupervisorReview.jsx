@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, Check, X } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Textarea } from '@/app/components/ui/textarea';
@@ -20,7 +20,6 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
   const isRejected = submission.validationStatus === 'Rejected';
   const isValidated = isApproved || isRejected;
 
-  // Pre-fill from saved approvalData if already validated, otherwise use defaults
   const [severity, setSeverity] = useState(submission.approvalData?.severity || 'Medium');
   const [priority, setPriority] = useState(submission.approvalData?.priority || 'Medium');
   const [estimatedCost, setEstimatedCost] = useState(
@@ -86,6 +85,7 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
 
   return (
     <div className="space-y-6">
+          <div className="flex items-center justify-between">
       <div className="flex items-center gap-4">
         <Button variant="outline" onClick={onBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -95,31 +95,52 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
           <h2 className="text-3xl font-bold">Supervisor Review</h2>
           <p className="text-gray-600 mt-1">{submission.pillarId}</p>
         </div>
-        {/* Status badge when already validated */}
-        {isValidated && (
-          <Badge className={isApproved ? 'bg-green-600 text-white text-sm px-3 py-1' : 'bg-red-100 text-red-700 text-sm px-3 py-1'}>
-            {isApproved ? '✓ Approved' : '✗ Rejected'}
-          </Badge>
-        )}
       </div>
+      {isValidated && (
+
+        <Button
+          size="lg"
+          disabled
+          className={`cursor-not-allowed opacity-50 text-white ${
+            isApproved 
+              ? 'bg-green-600 hover:bg-green-700' 
+              : 'bg-red-600 hover:bg-red-700'
+          }`}
+        >
+          {isApproved ? (
+            <>
+              <Check className="h-5 w-5 mr-2" />
+              Approved
+            </>
+          ) : (
+            <>
+              <X className="h-5 w-5 mr-2" />
+              Rejected
+            </>
+          )}
+        </Button>
+      )}
+    </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Detection Overview */}
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Detection Summary</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                {submission.images.map((img) => (
-                  <div key={img.side} className="space-y-2">
-                    <p className="text-sm font-medium capitalize">{img.side}</p>
-                    <img
-                      src={img.imageUrl}
-                      alt={img.side}
-                      className="w-full h-32 object-cover rounded-lg border"
-                    />
+          {/* Removed default bottom padding to control gap precisely */}
+          <CardHeader className="pb-0">
+            <CardTitle>Detection Summary</CardTitle>
+          </CardHeader>
+          {/* Added pt-6 to create a wider gap before "Front", "Right", etc. */}
+          <CardContent className="pt-4 space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              {submission.images.map((img) => (
+                <div key={img.side} className="space-y-2">
+                  {/* Label is now clearly separated from the Title */}
+                  <p className="text-sm font-medium capitalize">{img.side}</p>
+                  <img
+                    src={img.imageUrl}
+                    alt={img.side}
+                    className="w-full h-32 object-cover rounded-lg border"
+                  />
                     <p className="text-xs text-gray-600">
                       {submission.detectionResults?.find(r => r.side === img.side)?.boundingBoxes.length || 0} fault(s)
                     </p>
@@ -189,15 +210,16 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
         {/* Review Actions Sidebar */}
         <div className="space-y-6">
 
-          {/* Show Maintenance Assessment only if pending OR approved */}
           {(isApproved || !isValidated) && (
             <Card>
               <CardHeader>
                 <CardTitle>Maintenance Assessment</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              {/* Increased spacing between rows and added top padding */}
+              <CardContent className="space-y-6 pt-4">
                 <div>
-                  <Label htmlFor="severity">Severity Level</Label>
+                  {/* Added block and mb-2 to the label */}
+                  <Label htmlFor="severity" className="block mb-2">Severity Level</Label>
                   <Select value={severity} onValueChange={setSeverity} disabled={isValidated}>
                     <SelectTrigger id="severity" className={isValidated ? 'opacity-60 cursor-not-allowed' : ''}>
                       <SelectValue />
@@ -212,7 +234,7 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
                 </div>
 
                 <div>
-                  <Label htmlFor="priority">Priority</Label>
+                  <Label htmlFor="priority" className="block mb-2">Priority</Label>
                   <Select value={priority} onValueChange={setPriority} disabled={isValidated}>
                     <SelectTrigger id="priority" className={isValidated ? 'opacity-60 cursor-not-allowed' : ''}>
                       <SelectValue />
@@ -227,7 +249,7 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
                 </div>
 
                 <div>
-                  <Label htmlFor="cost">Estimated Cost (RM)</Label>
+                  <Label htmlFor="cost" className="block mb-2">Estimated Cost (RM)</Label>
                   <input
                     id="cost"
                     type="number"
@@ -239,7 +261,7 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
                 </div>
 
                 <div>
-                  <Label htmlFor="notes">Supervisor Notes</Label>
+                  <Label htmlFor="notes" className="block mb-2">Supervisor Notes</Label>
                   <Textarea
                     id="notes"
                     value={notes}
@@ -251,7 +273,6 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
                   />
                 </div>
 
-                {/* Only show Approve button if not yet validated */}
                 {!isValidated && (
                   <Button onClick={handleApprove} className="w-full bg-green-600" size="lg">
                     <CheckCircle className="h-5 w-5 mr-2" />
@@ -262,7 +283,6 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
             </Card>
           )}
 
-          {/* Show Reject section only if pending OR rejected */}
           {(isRejected || !isValidated) && (
             <Card className={isRejected ? 'border-red-300' : 'border-red-200'}>
               <CardHeader>
@@ -270,9 +290,9 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
                   {isRejected ? 'Rejection Reason' : 'Reject Submission'}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6 pt-4">
                 <div>
-                  <Label htmlFor="reject">
+                  <Label htmlFor="reject" className="block mb-2">
                     {isRejected ? 'Reason Given' : 'Reason for Rejection'}
                   </Label>
                   <Textarea
@@ -286,7 +306,6 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
                   />
                 </div>
 
-                {/* Only show Reject button if not yet validated */}
                 {!isValidated && (
                   <Button
                     onClick={handleReject}

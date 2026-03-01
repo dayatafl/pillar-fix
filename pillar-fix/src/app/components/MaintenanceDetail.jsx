@@ -199,10 +199,14 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
               </div>
 
               {item.status !== 'Completed' && item.status !== 'Verified' && (
+                
+                //Add Work Log Form//
+
                 <div className="space-y-4 pt-4 border-t">
                   <h4 className="font-semibold">Add Work Log</h4>
+
                   <div>
-                    <Label htmlFor="action">Action Performed</Label>
+                    <Label htmlFor="action" className="block mb-2">Action Performed</Label>
                     <Input
                       id="action"
                       value={workLogAction}
@@ -210,8 +214,9 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                       placeholder="e.g., Replaced damaged panel"
                     />
                   </div>
+
                   <div>
-                    <Label htmlFor="notes">Notes</Label>
+                    <Label htmlFor="notes" className="block mb-2">Notes</Label>
                     <Textarea
                       id="notes"
                       value={workLogNotes}
@@ -221,7 +226,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                     />
                   </div>
                   <div>
-                    <Label htmlFor="images">Images</Label>
+                    <Label htmlFor="images" className="block mb-2">Images</Label>
                     <input
                       ref={workLogFileInputRef}
                       type="file"
@@ -241,17 +246,24 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                     </Button>
 
                     {workLogImages.length > 0 && (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
-                        {workLogImages.map((img, idx) => (
-                          <img
-                            key={idx}
-                            src={img}
-                            alt={`Work Log ${idx + 1}`}
-                            className="w-full h-24 object-cover rounded-lg border"
-                          />
-                        ))}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                    {workLogImages.map((img, idx) => (
+                      <div key={idx} className="relative">
+                        <img
+                          src={img}
+                          alt={`Work Log ${idx + 1}`}
+                          className="w-full h-24 object-cover rounded-lg border"
+                        />
+                        <button
+                          onClick={() => setWorkLogImages(prev => prev.filter((_, i) => i !== idx))}
+                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
+                        >
+                          ✕
+                        </button>
                       </div>
-                    )}
+                    ))}
+                  </div>
+                )}
                   </div>
                   <Button onClick={() => {handleAddWorkLog(); onUpdateStatus(item.id, 'In Progress');}} className="w-full">
                     <Plus className="h-4 w-4 mr-2" />
@@ -292,17 +304,24 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                 </Button>
 
                 {completionImages.length > 0 && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                    {completionImages.map((img, idx) => (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {completionImages.map((img, idx) => (
+                    <div key={idx} className="relative">
                       <img
-                        key={idx}
                         src={img}
                         alt={`Completion ${idx + 1}`}
                         className="w-full h-24 object-cover rounded-lg border"
                       />
-                    ))}
-                  </div>
-                )}
+                      <button
+                        onClick={() => setCompletionImages(prev => prev.filter((_, i) => i !== idx))}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
                 {completionImages.length >= 4 && (
                   <Button
@@ -352,7 +371,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
         {/* Sidebar */}
         <div className="space-y-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-4">
               <CardTitle>Maintenance Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -384,6 +403,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                     <Button
                       variant="default"
                       className="w-full gap-2 bg-green-600 hover:bg-green-700"
+                      disabled={item.workLogs.length === 0 || !item.completion}
                       onClick={() => {
                         onUpdateStatus(item.id, 'Completed');
                         toast.success('Status updated to Completed');
@@ -463,10 +483,10 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
           </Card>
 
           <Card>
-            <CardHeader>
+            <CardHeader className="pb-4">
               <CardTitle>Location Details</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
+            <CardContent className="space-y-4 text-sm">
               <div>
                 <Label className="text-gray-600">Address</Label>
                 <p className="font-medium">{item.address}</p>

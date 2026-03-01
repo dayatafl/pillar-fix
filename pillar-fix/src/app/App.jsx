@@ -1,7 +1,19 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, ClipboardCheck, CheckSquare, Wrench, BarChart3, Menu, X, Zap, Map, Users as UsersIcon, LogOut } from 'lucide-react';
+import { 
+  ClipboardCheck, CheckSquare, Wrench, BarChart3, Menu, X, 
+  Map, Users as UsersIcon, LogOut, ChevronDown, ShieldCheck, 
+  HardHat, User, ClipboardList 
+} from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Avatar, AvatarFallback } from '@/app/components/ui/avatar';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from "@/app/components/ui/dropdown-menu";
 import { Toaster } from '@/app/components/ui/sonner';
 import { TechnicianDashboard } from '@/app/components/TechnicianDashboard';
 import { AuditForm } from '@/app/components/AuditForm';
@@ -15,8 +27,12 @@ import { Login } from '@/app/components/Login';
 import { UserManagement } from '@/app/components/UserManagement';
 import { EnhancedMapView } from '@/app/components/EnhancedMapView';
 import { toast } from 'sonner';
+<<<<<<< HEAD
+import logo from './components/logo/FINAL.svg';
+=======
 import logo from './components/logo/FINAL.svg'
 import api from "@/app/api";
+>>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
 
 export default function App() {
   // Auth state
@@ -24,7 +40,7 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // App state
-  const [currentView, setCurrentView] = useState('tech-dashboard');
+  const [currentView, setCurrentView] = useState('map');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // Data management
@@ -44,6 +60,30 @@ export default function App() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
+<<<<<<< HEAD
+
+    const interval = setInterval(() => {
+      setSubmissions(prev => {
+        const queued = prev.filter(s => s.detectionStatus === 'Queued');
+        if (queued.length > 0) {
+          const toProcess = queued[0];
+          setTimeout(() => {
+            setSubmissions(p => p.map(s => s.id === toProcess.id ? { ...s, detectionStatus: 'Processing' } : s));
+            setTimeout(() => {
+              const results = simulateAIDetection(toProcess);
+              setSubmissions(p => p.map(s => s.id === toProcess.id ? { ...s, detectionStatus: 'Completed', detectionResults: results } : s));
+              toast.success(`AI detection completed for ${toProcess.pillarId}`);
+            }, 3000);
+          }, 1000);
+        }
+        return prev;
+      });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
+  const handleLogin = (user, isSwitching = false) => {
+=======
     api.get("/tasks").then(({ data }) => setAuditTasks(data)).catch(console.error);
     api.get("/users").then(({ data }) => setUsers(data)).catch(console.error);
     api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
@@ -53,56 +93,46 @@ export default function App() {
 
   // Auth handlers
   const handleLogin = (user) => {
+>>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
     setCurrentUser(user);
     setIsAuthenticated(true);
-    
-    // Set default view based on user role
-    if (user.role === 'supervisor') {
-      setCurrentView('map');
-    } else if (user.role === 'manager') {
-      setCurrentView('analytics');
-    } else if (user.role === 'admin') {
-      setCurrentView('user-management');
-    } else {
-      setCurrentView('map');
-    }
-    
-    toast.success(`Welcome, ${user.name}!`);
+
+    if (user.role === 'manager') setCurrentView('analytics');
+    else if (user.role === 'admin') setCurrentView('user-management');
+    else setCurrentView('map');
+
+    if (!isSwitching) toast.success(`Welcome, ${user.name}!`);
+    else toast.info(`Switched to ${user.name} (${user.role})`);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     setIsAuthenticated(false);
-    setCurrentView('tech-dashboard');
+    setCurrentView('map');
     toast.info('Logged out successfully');
   };
 
-  // App handlers
+  // Task & Audit Handlers
   const handleStartAudit = (taskId) => {
     setSelectedTaskId(taskId);
-    const task = auditTasks.find(t => t.id === taskId);
-    if (task && task.status === 'Pending') {
-      setAuditTasks(prev => prev.map(t =>
-        t.id === taskId ? { ...t, status: 'In Progress' } : t
-      ));
-    }
+    setAuditTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'In Progress' } : t));
     setCurrentView('audit-form');
     setMobileMenuOpen(false);
   };
 
   const handleViewAIResultFromTask = (taskId) => {
-    // Find the submission associated with this task
     const submission = submissions.find(s => s.taskId === taskId);
     if (submission) {
       setSelectedSubmissionId(submission.id);
       setCurrentView('detection-results');
-      setMobileMenuOpen(false);
-    } else {
-      toast.error('No AI detection results found for this task');
-    }
+    } else toast.error('No results found');
   };
 
   const handleSubmitAudit = (submission) => {
+<<<<<<< HEAD
+    setSubmissions(prev => [submission, ...prev]);
+    setAuditTasks(prev => prev.map(t => t.id === submission.taskId ? { ...t, status: 'Completed' } : t));
+=======
     setSubmissions(prev => {
       // Replace existing submission for the same task if re-submitting, otherwise prepend
       const exists = prev.find(s => s.taskId === submission.taskId);
@@ -114,32 +144,19 @@ export default function App() {
     setAuditTasks(prev => prev.map(t =>
       t.id === submission.taskId ? { ...t, status: 'Submitted' } : t
     ));
+>>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
     setCurrentView('tech-dashboard');
   };
 
-  const handleViewDetection = (submissionId) => {
-    setSelectedSubmissionId(submissionId);
-    setCurrentView('detection-results');
-    setMobileMenuOpen(false);
-  };
-
-  const handleSendToSupervisor = (submissionId) => {
-  setSubmissions(prev => prev.map(s =>
-    s.id === submissionId
-      ? { ...s, sentToSupervisor: true }
-      : s
-  ));
-  toast.success('Detection sent to supervisor for validation');
-  setCurrentView('tech-dashboard');
-};
-
-  const handleReviewSubmission = (submissionId) => {
-    setSelectedSubmissionId(submissionId);
-    setCurrentView('supervisor-review');
-    setMobileMenuOpen(false);
-  };
-
+  // Maintenance & Supervisor Handlers
   const handleApproveForMaintenance = (submissionId, approvalData) => {
+<<<<<<< HEAD
+    const submission = submissions.find(s => s.id === submissionId);
+    if (submission) {
+      setMaintenanceItems(prev => [createMockMaintenanceItem(submission, approvalData), ...prev]);
+      setSubmissions(prev => prev.map(s => s.id === submissionId ? { ...s, validated: true, validationStatus: 'Approved' } : s));
+    }
+=======
     setSubmissions(prev => prev.map(s =>
       s.id === submissionId
         ? { 
@@ -158,10 +175,19 @@ export default function App() {
       ));
     }
     fetchMaintenance();
+>>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
     setCurrentView('supervisor-validation');
   };
 
   const handleRejectSubmission = (submissionId, reason) => {
+<<<<<<< HEAD
+    setSubmissions(prev => prev.map(s => s.id === submissionId ? { ...s, validated: true, validationStatus: 'Rejected', rejectionReason: reason } : s));
+    setCurrentView('supervisor-validation');
+  };
+
+  const handleAssignTask = (taskId, technicianName) => {
+    setAuditTasks(prev => prev.map(task => task.id === taskId ? { ...task, assignedTo: technicianName } : task));
+=======
     setSubmissions(prev => prev.map(s =>
       s.id === submissionId
         ? { ...s, validated: true, validationStatus: 'Rejected', rejectionReason: reason }
@@ -169,63 +195,15 @@ export default function App() {
         ));
       toast.info('Submission rejected');
     setCurrentView('supervisor-validation');
+>>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
   };
 
   const handleViewMaintenanceDetail = (itemId) => {
     setSelectedMaintenanceId(itemId);
     setCurrentView('maintenance-detail');
-    setMobileMenuOpen(false);
   };
 
-  const handleUpdateWorkLog = (itemId, log) => {
-    setMaintenanceItems(prev => prev.map(item =>
-      item.id === itemId
-        ? { ...item, workLogs: [...item.workLogs, log] }
-        : item
-    ));
-  };
-
-  const handleSubmitCompletion = (itemId, completionData) => {
-    setMaintenanceItems(prev => prev.map(item =>
-      item.id === itemId
-        ? { ...item, status: 'Completed', completion: completionData }
-        : item
-    ));
-    toast.success('Completion images submitted');
-  };
-
-
-  const handleUpdateMaintenanceStatus = (itemId, status) => {
-    setMaintenanceItems(prev => prev.map(item =>
-      item.id === itemId
-        ? { ...item, status }
-        : item
-    ));
-  };
-
-  const handleAssignTask = (taskId, technicianName) => {
-    setAuditTasks(prev => prev.map(task =>
-      task.id === taskId
-        ? { ...task, assignedTo: technicianName }
-        : task
-    ));
-  };
-
-  // Show login if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <>
-        <Login onLogin={handleLogin} />
-        <Toaster />
-      </>
-    );
-  }
-
-  const selectedTask = auditTasks.find(t => t.id === selectedTaskId);
-  const selectedSubmission = submissions.find(s => s.id === selectedSubmissionId);
-  const selectedMaintenance = maintenanceItems.find(m => m.id === selectedMaintenanceId);
-
-  // Define menu items based on user role
+  // Menu Helper
   const getMenuItems = () => {
     const baseItems = [
       { id: 'analytics', label: 'Analytics', icon: BarChart3, view: 'analytics', roles: ['manager', 'admin'] },
@@ -235,125 +213,113 @@ export default function App() {
       { id: 'maintenance-list', label: 'Maintenance', icon: Wrench, view: 'maintenance-list', roles: ['technician', 'supervisor', 'manager', 'admin'] },
       { id: 'user-management', label: 'Users', icon: UsersIcon, view: 'user-management', roles: ['admin'] },
     ];
-
     return baseItems.filter(item => currentUser && item.roles.includes(currentUser.role));
   };
+
+  const getRoleIcon = (role) => {
+    switch (role) {
+      case 'admin': return <ShieldCheck className="mr-2 h-4 w-4 text-red-600" />;
+      case 'manager': return <User className="mr-2 h-4 w-4 text-blue-600" />;
+      case 'supervisor': return <ClipboardList className="mr-2 h-4 w-4 text-purple-600" />;
+      case 'technician': return <HardHat className="mr-2 h-4 w-4 text-orange-600" />;
+      default: return <User className="mr-2 h-4 w-4" />;
+    }
+  };
+
+  // AUTH GUARD: Show Login screen first
+  if (!isAuthenticated) return <><Login onLogin={(u) => handleLogin(u, false)} /><Toaster /></>;
 
   const menuItems = getMenuItems();
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-12 h-12">
-                <img src={logo} className='w-8'/>
-              </div>
+              <img src={logo} className='w-8' alt="Logo" />
               <div>
-                <span className="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
-                Pillar
-                </span>
-                <span className = "text-3xl font-bold text-center bg-gradient-to-r from-red-600 to-red-700 bg-clip-text text-transparent">
-                Fix
-                </span>
-                <p className="text-xs text-gray-500">Intelligent Maintenance System</p>
+                <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">Pillar</span>
+                <span className="text-3xl font-bold bg-gradient-to-r from-red-600 to-red-700 bg-clip-text text-transparent">Fix</span>
               </div>
             </div>
 
-            {/* Desktop Navigation */}
             <nav className="hidden lg:flex items-center gap-2">
               {menuItems.map((item) => (
-                <Button
-                  key={item.id}
-                  variant={currentView === item.view ? 'default' : 'ghost'}
-                  onClick={() => {
-                    setCurrentView(item.view);
-                    setSelectedTaskId(null);
-                    setSelectedSubmissionId(null);
-                    setSelectedMaintenanceId(null);
-                  }}
-                  className="gap-2"
+                <Button 
+                  key={item.id} 
+                  variant={currentView === item.view ? 'default' : 'ghost'} 
                   size="sm"
+                  onClick={() => setCurrentView(item.view)}
                 >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
+                  <item.icon className="h-4 w-4 mr-2" /> {item.label}
                 </Button>
               ))}
               
               <div className="flex items-center gap-2 ml-4 pl-4 border-l">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-blue-100 text-blue-700">
-                    {currentUser?.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="hidden xl:block">
-                  <p className="text-sm font-medium">{currentUser?.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{currentUser?.role}</p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
-                  <LogOut className="h-4 w-4" />
-                  <span className="hidden xl:inline">Logout</span>
-                </Button>
+                {/* ROLE SWITCHER DROPDOWN */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="flex items-center gap-3 h-auto py-1 px-2 hover:bg-gray-100">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
+                          {currentUser.name.split(' ').map(n => n[0]).join('')}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="hidden xl:flex flex-col items-start text-left">
+                        <p className="text-sm font-medium leading-none">{currentUser.name}</p>
+                        <p className="text-[10px] text-muted-foreground capitalize mt-1">{currentUser.role}</p>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-gray-400" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-47">
+                  <DropdownMenuLabel>Demo Role</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  
+                  {/* Filter to show only one user per role to simplify the demo */}
+                  {users
+                    .filter((user) => user.name !== 'Maria Garcia') // Specifically removes the extra technician
+                    .map((user) => (
+                      <DropdownMenuItem 
+                        key={user.id} 
+                        onClick={() => handleLogin(user, true)} 
+                        className={`cursor-pointer ${currentUser.id === user.id ? 'bg-blue-50' : ''}`}
+                      >
+                        {getRoleIcon(user.role)}
+                        <div className="flex flex-col">
+                          <span className="text-sm">{user.name}</span>
+                          <span className="text-[10px] text-gray-500 capitalize">{user.role}</span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                    
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="text-red-600 cursor-pointer">
+                    <LogOut className="mr-2 h-4 w-4" /> Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </nav>
-
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
-            >
-              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </button>
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden p-2"><Menu className="h-6 w-6" /></button>
           </div>
         </div>
-
-        {/* Mobile Navigation */}
-        {mobileMenuOpen && (
-          <div className="lg:hidden border-t bg-white shadow-lg">
-            <nav className="px-4 py-4 space-y-2">
-              {menuItems.map((item) => (
-                <Button
-                  key={item.id}
-                  variant={currentView === item.view ? 'default' : 'ghost'}
-                  onClick={() => {
-                    setCurrentView(item.view);
-                    setSelectedTaskId(null);
-                    setSelectedSubmissionId(null);
-                    setSelectedMaintenanceId(null);
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full justify-start gap-2"
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Button>
-              ))}
-              <div className="pt-4 border-t">
-                <div className="flex items-center gap-3 mb-3">
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback className="bg-blue-100 text-blue-700">
-                      {currentUser?.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-medium">{currentUser?.name}</p>
-                    <p className="text-sm text-muted-foreground capitalize">{currentUser?.role}</p>
-                  </div>
-                </div>
-                <Button variant="outline" onClick={handleLogout} className="w-full gap-2">
-                  <LogOut className="h-4 w-4" />
-                  Logout
-                </Button>
-              </div>
-            </nav>
-          </div>
-        )}
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<<<<<<< HEAD
+        {currentView === 'tech-dashboard' && <TechnicianDashboard tasks={auditTasks} submissions={submissions} onStartAudit={handleStartAudit} onViewAIResult={handleViewAIResultFromTask} currentUser={currentUser} technicians={users} onUpdateTasks={setAuditTasks} onAssignTask={handleAssignTask} />}
+        {currentView === 'audit-form' && <AuditForm task={auditTasks.find(t => t.id === selectedTaskId)} onBack={() => setCurrentView('tech-dashboard')} onSubmit={handleSubmitAudit} />}
+        {currentView === 'detection-results' && <DetectionResults submission={submissions.find(s => s.id === selectedSubmissionId)} currentUser={currentUser} onBack={() => setCurrentView('tech-dashboard')} onSendToSupervisor={(id) => { setSubmissions(p => p.map(s => s.id === id ? {...s, sentToSupervisor: true} : s)); setCurrentView('tech-dashboard'); }} onViewValidation={(id) => { setSelectedSubmissionId(id); setCurrentView('supervisor-review'); }} />}
+        {currentView === 'supervisor-validation' && <SupervisorValidation submissions={submissions.filter(s => s.detectionStatus === 'Completed')} onReview={(id) => { setSelectedSubmissionId(id); setCurrentView('supervisor-review'); }} />}
+        {currentView === 'supervisor-review' && <SupervisorReview submission={submissions.find(s => s.id === selectedSubmissionId)} onBack={() => setCurrentView('supervisor-validation')} onApprove={handleApproveForMaintenance} onReject={handleRejectSubmission} />}
+        {currentView === 'maintenance-list' && <MaintenanceList items={maintenanceItems} onViewDetails={handleViewMaintenanceDetail} onUpdateStatus={(id, s) => setMaintenanceItems(p => p.map(i => i.id === id ? {...i, status: s} : i))} />}
+        {currentView === 'maintenance-detail' && <MaintenanceDetail item={maintenanceItems.find(m => m.id === selectedMaintenanceId)} onBack={() => setCurrentView('maintenance-list')} onUpdateWorkLog={(id, l) => setMaintenanceItems(p => p.map(i => i.id === id ? {...i, workLogs: [...i.workLogs, l]} : i))} onSubmitCompletion={(id, d) => setMaintenanceItems(p => p.map(i => i.id === id ? {...i, status: 'Completed', completion: d} : i))} onUpdateStatus={(id, s) => setMaintenanceItems(p => p.map(i => i.id === id ? {...i, status: s} : i))} />}
+        {currentView === 'analytics' && <Analytics maintenanceItems={maintenanceItems} />}
+        {currentView === 'user-management' && <UserManagement currentUser={currentUser} users={users} onUpdateUsers={setUsers} />}
+        {currentView === 'map' && <EnhancedMapView maintenanceItems={maintenanceItems} auditTasks={auditTasks} submissions={submissions} onPillarSelect={(pId) => { const item = maintenanceItems.find(m => m.pillarId === pId); if (item) handleViewMaintenanceDetail(item.id); }} />}
+=======
         {currentView === 'tech-dashboard' && (
           <TechnicianDashboard
             tasks={auditTasks}
@@ -447,8 +413,8 @@ export default function App() {
             }}
           />
         )}
+>>>>>>> e760dbb1b0c032ad645b23375ecb1eef658d0029
       </main>
-
       <Toaster />
     </div>
   );

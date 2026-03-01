@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogIn, Zap } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
@@ -40,24 +40,28 @@ export function Login({ onLogin }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 flex flex-col items-center">
-          <div className="flex items-center justify-center mb-2">
-            <img src={logo} className='w-12'/>
-          </div>
-          <CardTitle className = "text-3xl font-bold text-center">
-          <span className="text-3xl font-bold text-center bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+        <CardHeader className="flex flex-col items-center pb-0">
+        {/* Changed mb-2 to mb-0 to remove the gap below the logo */}
+        <div className="flex items-center justify-center mb-0">
+          <img src={logo} className="w-20" alt="Logo" />
+        </div>
+        
+        {/* Added mt-1 to provide just a tiny sliver of space if needed, 
+            or use mt-0 for maximum closeness */}
+        <CardTitle className="text-3xl font-bold text-center leading-tight mt-0">
+          <span className="bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
             Pillar
-            </span>
-            <span className = "text-red-500">
-            Fix
-            </span>
-          </CardTitle>
-          <CardDescription className="text-center">
-            Intelligent Feeder Pillar Maintenance System
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          </span>
+          <span className="text-red-500">Fix</span>
+        </CardTitle>
+        
+        <CardDescription className="text-center mt-[-2px] text-sm">
+          Intelligent Feeder Pillar Maintenance System
+        </CardDescription>
+      </CardHeader>
+
+        <CardContent className="pt-8">
+          <form onSubmit={handleSubmit} className="space-y-4 pt-4">
             <div className="space-y-2">
               <Label htmlFor="emailOrUsername">Email or Username</Label>
               <Input
@@ -87,11 +91,7 @@ export function Login({ onLogin }) {
               </Alert>
             )}
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loading}
-            >
+            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={loading}>
               <LogIn className="mr-2 h-4 w-4" />
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>

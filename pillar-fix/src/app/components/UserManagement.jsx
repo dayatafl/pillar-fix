@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { UserPlus, UserX, Users, Shield, Edit, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { UserPlus, Users, Shield, Edit, CheckCircle, XCircle, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -41,6 +41,14 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
       toast.error('All fields are required');
       return;
     }
+    if (users.some(u => u.email === newUser.email)) {
+      toast.error('Email already exists');
+      return;
+    }
+    if (users.some(u => u.username === newUser.username)) {
+      toast.error('Username already exists');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -54,7 +62,6 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
         locality: newUser.locality || null,
       });
 
-      // Add the returned user (with real DB id) to local state
       onUpdateUsers([...users, data]);
       toast.success(`User ${data.name} created successfully`);
       setIsCreateDialogOpen(false);
@@ -96,7 +103,6 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
         locality: editUser.locality || null,
       });
 
-      // Replace the updated user in local state
       onUpdateUsers(users.map(u => u.id === selectedUser.id ? { ...u, ...data } : u));
       toast.success(`User ${data.name} updated successfully`);
       setIsEditDialogOpen(false);
@@ -145,16 +151,11 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
 
   const getRoleBadgeColor = (role) => {
     switch (role) {
-      case 'admin':
-        return 'bg-red-100 text-red-800 border-red-300';
-      case 'manager':
-        return 'bg-purple-100 text-purple-800 border-purple-300';
-      case 'supervisor':
-        return 'bg-blue-100 text-blue-800 border-blue-300';
-      case 'technician':
-        return 'bg-green-100 text-green-800 border-green-300';
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-300';
+      case 'admin': return 'bg-red-100 text-red-800 border-red-300';
+      case 'manager': return 'bg-purple-100 text-purple-800 border-purple-300';
+      case 'supervisor': return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'technician': return 'bg-green-100 text-green-800 border-green-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
     }
   };
 
@@ -163,7 +164,7 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">User Management</h2>
-          <p className="text-muted-foreground">Manage system users and their access levels</p>
+          <p className="text-gray-500 mt-1">Manage system users and their access levels</p>
         </div>
         <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
           <UserPlus className="h-4 w-4" />
@@ -171,56 +172,57 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-gray-600">Total Users</CardTitle>
+            <Users className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{users.length}</div>
-            <p className="text-xs text-muted-foreground">Registered users</p>
+            <p className="text-xs text-gray-500 mt-1">Registered users</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Users</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium text-gray-600">Active Users</CardTitle>
+            <CheckCircle className="h-5 w-5 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{users.filter(u => u.isActive).length}</div>
-            <p className="text-xs text-muted-foreground">Currently active</p>
+            <p className="text-xs text-gray-500 mt-1">Currently active</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Inactive Users</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600" />
+            <CardTitle className="text-sm font-medium text-gray-600">Inactive Users</CardTitle>
+            <XCircle className="h-5 w-5 text-red-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{users.filter(u => !u.isActive).length}</div>
-            <p className="text-xs text-muted-foreground">Currently inactive</p>
+            <p className="text-xs text-gray-500 mt-1">Currently inactive</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Administrators</CardTitle>
-            <Shield className="h-4 w-4 text-red-600" />
+            <CardTitle className="text-sm font-medium text-gray-600">Administrators</CardTitle>
+            <Shield className="h-5 w-5 text-red-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{users.filter(u => u.role === 'admin').length}</div>
-            <p className="text-xs text-muted-foreground">System admins</p>
+            <p className="text-xs text-gray-500 mt-1">System admins</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="gap-4">
           <CardTitle>Users</CardTitle>
-          <CardDescription>A list of all users in the system</CardDescription>
+          <CardDescription className="text-[15px] font-normal text-gray-600">A list of all users in the system</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -238,11 +240,11 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
             <TableBody>
               {users.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.name}</TableCell>
+                  <TableCell className="font-medium text-gray-600">{user.name}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.employeeId}</TableCell>
                   <TableCell>
-                    <Badge className={getRoleBadgeColor(user.role)} variant="outline">
+                    <Badge className={`${getRoleBadgeColor(user.role)} w-23 justify-center`} variant="outline">
                       {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                     </Badge>
                   </TableCell>
@@ -259,9 +261,7 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell>
-                    {new Date(user.createdAt).toLocaleDateString()}
-                  </TableCell>
+                  <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Button
@@ -290,61 +290,34 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
         </CardContent>
       </Card>
 
+      {/* Create User Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Create New User</DialogTitle>
-            <DialogDescription>
-              Add a new user to the PillarFix system. All fields are required.
-            </DialogDescription>
+            <DialogDescription>Add a new user to the PillarFix system. All fields are required.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                value={newUser.name}
-                onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                placeholder="John Doe"
-              />
+              <Input id="name" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="John Doe" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={newUser.email}
-                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                placeholder="john@tnb.com"
-              />
+              <Input id="email" type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} placeholder="john@tnb.com" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                value={newUser.username}
-                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                placeholder="johndoe"
-              />
+              <Input id="username" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} placeholder="johndoe" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="employeeId">Employee ID</Label>
-              <Input
-                id="employeeId"
-                value={newUser.employeeId}
-                onChange={(e) => setNewUser({ ...newUser, employeeId: e.target.value })}
-                placeholder="EMP001"
-              />
+              <Input id="employeeId" value={newUser.employeeId} onChange={(e) => setNewUser({ ...newUser, employeeId: e.target.value })} placeholder="EMP001" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="role">Role</Label>
-              <Select
-                value={newUser.role}
-                onValueChange={(value) => setNewUser({ ...newUser, role: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+              <Select value={newUser.role} onValueChange={(value) => setNewUser({ ...newUser, role: value })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="technician">Technician</SelectItem>
                   <SelectItem value="supervisor">Supervisor</SelectItem>
@@ -364,22 +337,14 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Initial Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={newUser.password}
-                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                placeholder="Temporary password"
-              />
+              <Input id="password" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="Temporary password" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleCreateUser} disabled={loading}>
-            {loading ? 'Creating...' : 'Create User'}
-          </Button>
+              {loading ? 'Creating...' : 'Create User'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -389,47 +354,24 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
-            <DialogDescription>
-              Update user information. All fields are required.
-            </DialogDescription>
+            <DialogDescription>Update user information. All fields are required.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="edit-name">Full Name</Label>
-              <Input
-                id="edit-name"
-                value={editUser.name}
-                onChange={(e) => setEditUser({ ...editUser, name: e.target.value })}
-                placeholder="John Doe"
-              />
+              <Input id="edit-name" value={editUser.name} onChange={(e) => setEditUser({ ...editUser, name: e.target.value })} placeholder="John Doe" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-email">Email</Label>
-              <Input
-                id="edit-email"
-                type="email"
-                value={editUser.email}
-                onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
-                placeholder="john@tnb.com"
-              />
+              <Input id="edit-email" type="email" value={editUser.email} onChange={(e) => setEditUser({ ...editUser, email: e.target.value })} placeholder="john@tnb.com" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-username">Username</Label>
-              <Input
-                id="edit-username"
-                value={editUser.username}
-                onChange={(e) => setEditUser({ ...editUser, username: e.target.value })}
-                placeholder="johndoe"
-              />
+              <Input id="edit-username" value={editUser.username} onChange={(e) => setEditUser({ ...editUser, username: e.target.value })} placeholder="johndoe" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-employeeId">Employee ID</Label>
-              <Input
-                id="edit-employeeId"
-                value={editUser.employeeId}
-                onChange={(e) => setEditUser({ ...editUser, employeeId: e.target.value })}
-                placeholder="EMP001"
-              />
+              <Input id="edit-employeeId" value={editUser.employeeId} onChange={(e) => setEditUser({ ...editUser, employeeId: e.target.value })} placeholder="EMP001" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-locality">Locality (for technicians)</Label>
@@ -442,13 +384,8 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-role">Role</Label>
-              <Select
-                value={editUser.role}
-                onValueChange={(value) => setEditUser({ ...editUser, role: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+              <Select value={editUser.role} onValueChange={(value) => setEditUser({ ...editUser, role: value })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="technician">Technician</SelectItem>
                   <SelectItem value="supervisor">Supervisor</SelectItem>
@@ -459,10 +396,10 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              Cancel
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdateUser} disabled={loading}>
+              {loading ? 'Updating...' : 'Update User'}
             </Button>
-            <Button onClick={handleUpdateUser}>Update User</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -472,9 +409,7 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Delete User</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this user? This action cannot be undone.
-            </DialogDescription>
+            <DialogDescription>Are you sure you want to delete this user? This action cannot be undone.</DialogDescription>
           </DialogHeader>
           {selectedUser && (
             <div className="py-4">
@@ -486,11 +421,9 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDeleteUser}>
-              Delete User
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDeleteUser} disabled={loading}>
+              {loading ? 'Deleting...' : 'Delete User'}
             </Button>
           </DialogFooter>
         </DialogContent>

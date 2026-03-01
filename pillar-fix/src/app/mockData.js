@@ -112,7 +112,7 @@ export const createMockMaintenanceItem = (submission, approvalData) => {
     faults: submission.detectionResults?.flatMap(r => r.boundingBoxes.map(b => b.faultType)) || [],
     severity: approvalData.severity,
     priority: approvalData.priority,
-    status: 'Approved',
+    status: 'Pending',
     approvedBy: 'Supervisor Admin',
     approvedAt: new Date().toISOString(),
     estimatedCost: approvalData.estimatedCost,

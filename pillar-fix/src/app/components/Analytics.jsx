@@ -147,7 +147,7 @@ export function Analytics({ maintenanceItems }) {
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-bold">Analytics & Insights</h2>
-        <p className="text-gray-600 mt-1">
+        <p className="text-gray-500 mt-1">
           Cost optimization forecasting and hotspot analysis
         </p>
       </div>
@@ -156,7 +156,7 @@ export function Analytics({ maintenanceItems }) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
               Total Maintenance Cost
             </CardTitle>
@@ -170,9 +170,9 @@ export function Analytics({ maintenanceItems }) {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Average Cost per Issue
+              Average Cost per Pillar
             </CardTitle>
             <TrendingUp className="h-5 w-5 text-orange-400" />
           </CardHeader>
@@ -183,7 +183,7 @@ export function Analytics({ maintenanceItems }) {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
               Potential Savings
             </CardTitle>
@@ -198,7 +198,7 @@ export function Analytics({ maintenanceItems }) {
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
               Hotspot Areas
             </CardTitle>
@@ -214,14 +214,19 @@ export function Analytics({ maintenanceItems }) {
       {/* Cost Forecast Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Cost Optimization Forecast</CardTitle>
+          <CardTitle className="text-sm font-medium text-gray-600">Cost Optimization Forecast</CardTitle>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={400}>
             <LineChart data={costData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="year" />
-              <YAxis />
+              <XAxis 
+                dataKey="year" 
+                tick={{ fontSize: 12 }}
+              />
+              <YAxis 
+                tick={{ fontSize: 12 }}
+              />
               <Tooltip
                 formatter={(value) => `RM ${value.toLocaleString()}`}
               />
@@ -245,7 +250,7 @@ export function Analytics({ maintenanceItems }) {
         {/* Severity Distribution */}
         <Card>
           <CardHeader>
-            <CardTitle>Issue Severity Distribution</CardTitle>
+            <CardTitle>Pillar Count by Severity Level</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
@@ -272,15 +277,23 @@ export function Analytics({ maintenanceItems }) {
 
         {/* Fault Type Distribution */}
         <Card>
-          <CardHeader>
-            <CardTitle>Fault Type Frequency</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle>Pillar Fault Type Frequency</CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={faultTypeData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-                <YAxis />
+                <XAxis 
+                dataKey="name" 
+                angle={-45} 
+                textAnchor="end" 
+                height={100}
+                tick={{ fontSize: 12 }} 
+                />
+                <YAxis 
+                tick={{ fontSize: 12 }}
+                />
                 <Tooltip />
                 <Bar dataKey="value" fill="#3B82F6" name="Occurrences" />
               </BarChart>
@@ -291,13 +304,13 @@ export function Analytics({ maintenanceItems }) {
 
       {/* Hotspot Map */}
       <Card>
-        <CardHeader>
-          <CardTitle>Issue Hotspot Areas</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle>Pillar Hotspot Areas</CardTitle>
         </CardHeader>
         <CardContent>
           <div
             ref={mapContainerRef}
-            className="w-full h-[500px] rounded-lg mb-4"
+            className="w-full h-[500px] relative z-0 rounded-lg mb-4"
           />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {hotspotAreas.map((area, index) => (
@@ -309,7 +322,7 @@ export function Analytics({ maintenanceItems }) {
                   <div>
                     <h4 className="font-semibold">{area.locality}</h4>
                     <p className="text-sm text-gray-600 mt-1">
-                      {area.issueCount} total issues
+                      {area.issueCount} total pillars
                     </p>
                   </div>
                   {area.criticalCount > 8 ? (
