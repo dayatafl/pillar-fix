@@ -237,11 +237,6 @@ export function AuditForm({ task, onBack, onSubmit }) {
               </div>
 
               <div>
-                <Label className="text-gray-600 block mb-1.5">Location</Label>
-                <Input value={task.location} readOnly className="bg-gray-50" />
-              </div>
-
-              <div>
                 <Label className="text-gray-600 block mb-1.5">Address</Label>
                 <Input value={task.address} readOnly className="bg-gray-50" />
               </div>

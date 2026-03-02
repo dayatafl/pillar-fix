@@ -16,22 +16,27 @@ import { AlertCircle } from 'lucide-react';
 import { MapPin } from 'lucide-react';
 import { Banknote } from 'lucide-react';
 
-export function MaintenanceList({ items, onViewDetails, onUpdateStatus }) {
+export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateStatus }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
 
-  const filteredItems = items.filter(item => {
+  // Technicians only see items assigned to them
+  const visibleItems = currentUser?.role === 'technician'
+    ? items.filter(item => item.assignedTo === currentUser.name)
+    : items;
+
+  const filteredItems = visibleItems.filter(item => {
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
     const matchesPriority = priorityFilter === 'all' || item.priority === priorityFilter;
     return matchesStatus && matchesPriority;
   });
 
   const stats = {
-    total: items.length,
-    pending: items.filter(i => i.status === 'Pending' || i.status === 'Approved').length,
-    inProgress: items.filter(i => i.status === 'In Progress').length,
-    completed: items.filter(i => i.status === 'Completed').length,
-    totalCost: items.reduce((sum, i) => sum + i.estimatedCost, 0),
+    total: visibleItems.length,
+    pending: visibleItems.filter(i => i.status === 'Pending' || i.status === 'Approved').length,
+    inProgress: visibleItems.filter(i => i.status === 'In Progress').length,
+    completed: visibleItems.filter(i => i.status === 'Completed').length,
+    totalCost: visibleItems.reduce((sum, i) => sum + i.estimatedCost, 0),
   };
 
   const getStatusBadge = (status) => {

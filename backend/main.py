@@ -8,6 +8,7 @@ from models import User, Pillar, Task, Photo, Detection
 from database import engine, SessionLocal
 from datetime import datetime
 import uuid
+import math
 
 
 app = FastAPI()
@@ -144,6 +145,61 @@ def compute_overall_risk(detections: list[dict]) -> str:
     if len(detections) > 1:
         return "Medium"
     return "Low"
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Return great-circle distance in km between two (lat, lng) points."""
+    R = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lng2 - lng1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _technician_centroid(tech_employee_id: str, db: Session):
+    """
+    Compute a technician's approximate location as the centroid of all
+    pillars currently assigned to them (any non-Completed task).
+    Returns (lat, lng) or None if they have no prior assignments.
+    """
+    active_statuses = ["Pending", "In Progress", "Submitted", "Validated"]
+    assigned_pillar_ids = (
+        db.query(Task.pillar_id)
+        .filter(Task.assigned_to == tech_employee_id, Task.task_status.in_(active_statuses))
+        .all()
+    )
+    if not assigned_pillar_ids:
+        return None
+
+    coords = []
+    for (pid,) in assigned_pillar_ids:
+        pillar = db.query(Pillar).filter(Pillar.pillarId == pid).first()
+        if pillar and pillar.coordinates:
+            coords.append((pillar.coordinates["lat"], pillar.coordinates["lng"]))
+
+    if not coords:
+        return None
+
+    avg_lat = sum(c[0] for c in coords) / len(coords)
+    avg_lng = sum(c[1] for c in coords) / len(coords)
+    return (avg_lat, avg_lng)
+
+
+def _locality_centroid(locality: str, db: Session):
+    """
+    Fallback: centroid of all pillars in the given locality.
+    Used when a technician has no prior task assignments.
+    """
+    pillars = db.query(Pillar).filter(Pillar.locality == locality).all()
+    coords = [
+        (p.coordinates["lat"], p.coordinates["lng"])
+        for p in pillars
+        if p.coordinates
+    ]
+    if not coords:
+        return None
+    return (sum(c[0] for c in coords) / len(coords), sum(c[1] for c in coords) / len(coords))
+
 
 
 # ---------------------------------------------------------------------------
@@ -388,24 +444,61 @@ async def create_task(task: TaskCreate, db: db_dependency):
     if not pillar:
         raise HTTPException(status_code=404, detail="Pillar not found")
 
-    # Roles stored lowercase to match frontend convention
-    technician = db.query(User).filter(
-        User.role == "technician",
-        User.locality == pillar.locality,
-        User.isActive == True,
-    ).first()
+    if not pillar.coordinates:
+        raise HTTPException(status_code=400, detail="Pillar has no coordinates — cannot compute nearest technician")
 
-    if not technician:
+    target_lat = pillar.coordinates["lat"]
+    target_lng = pillar.coordinates["lng"]
+
+    # All active technicians (no locality filter)
+    technicians = db.query(User).filter(
+        User.role == "technician",
+        User.isActive == True,
+    ).all()
+
+    if not technicians:
+        raise HTTPException(status_code=404, detail="No active technicians found")
+
+    active_statuses = ["Pending", "In Progress", "Submitted", "Validated"]
+
+    best_tech = None
+    best_distance = float("inf")
+    best_workload = float("inf")
+
+    for tech in technicians:
+        # Determine tech's approximate location
+        centroid = _technician_centroid(tech.employeeId, db)
+        print(centroid)
+        if centroid is None:
+            centroid = _locality_centroid(tech.locality, db) if tech.locality else None
+        if centroid is None:
+            # No spatial data at all — skip this technician
+            continue
+
+        distance = _haversine_km(target_lat, target_lng, centroid[0], centroid[1])
+        print(distance)
+        workload = db.query(Task).filter(
+            Task.assigned_to == tech.employeeId,
+            Task.task_status.in_(active_statuses),
+        ).count()
+
+        # Pick closest; break ties by fewest active tasks
+        if distance < best_distance or (distance == best_distance and workload < best_workload):
+            best_tech = tech
+            best_distance = distance
+            best_workload = workload
+
+    if not best_tech:
         raise HTTPException(
             status_code=404,
-            detail=f"No active technician found for locality: {pillar.locality}",
+            detail="No technician with location data found — ensure technicians have a locality or existing task assignments",
         )
 
     new_task = Task(
         pillar_id=task.pillar_id,
         due_date=task.due_date,
-        assigned_to=technician.employeeId,
-        created_by=task.created_by,   # who created this task record
+        assigned_to=best_tech.employeeId,
+        created_by=task.created_by,
         task_status="Pending",
         created_date=datetime.utcnow(),
         updated_date=datetime.utcnow(),
@@ -416,12 +509,13 @@ async def create_task(task: TaskCreate, db: db_dependency):
     db.refresh(new_task)
 
     return {
-        "message": "Task created and technician assigned",
+        "message": "Task created and assigned to nearest technician",
         "task_id": new_task.task_id,
-        "assigned_to": technician.employeeId,
-        "locality": pillar.locality,
+        "assigned_to": best_tech.employeeId,
+        "assigned_to_name": best_tech.name,
+        "distance_km": round(best_distance, 2),
+        "active_tasks": best_workload,
     }
-
 
 @app.put("/tasks/{task_id}/reassign")
 async def reassign_task(task_id: int, data: TaskReassign, db: db_dependency):

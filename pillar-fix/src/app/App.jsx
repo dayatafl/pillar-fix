@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   ClipboardCheck, CheckSquare, Wrench, BarChart3, Menu, X, 
   Map, Users as UsersIcon, LogOut, ChevronDown, ShieldCheck, 
@@ -55,17 +55,31 @@ export default function App() {
   const selectedSubmission = submissions.find(s => s.id === selectedSubmissionId);
   const selectedMaintenance = maintenanceItems.find(m => m.id === selectedMaintenanceId);
 
+  const fetchData = useCallback(() => {
+    if (!isAuthenticated) return;
+    api.get("/tasks").then(({ data }) => setAuditTasks(data)).catch(console.error);
+    api.get("/submissions").then(({ data }) => setSubmissions(data)).catch(console.error);
+    api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
+  }, [isAuthenticated]);
+
   const fetchMaintenance = () => {
     api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
   };
 
+  // Initial load on login
   useEffect(() => {
     if (!isAuthenticated) return;
-    api.get("/tasks").then(({ data }) => setAuditTasks(data)).catch(console.error);
+    fetchData();
     api.get("/users").then(({ data }) => setUsers(data)).catch(console.error);
-    api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
-    api.get("/submissions").then(({ data }) => setSubmissions(data)).catch(console.error);
   }, [isAuthenticated]);
+
+  // Poll for fresh data every 10 seconds on live-data views
+  useEffect(() => {
+    const pollingViews = ['supervisor-validation', 'tech-dashboard', 'supervisor-review'];
+    if (!isAuthenticated || !pollingViews.includes(currentView)) return;
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, currentView, fetchData]);
 
   // Auth handlers
   const handleLogin = (user, isSwitching = false) => {
@@ -131,6 +145,7 @@ export default function App() {
     setSubmissions(prev => prev.map(s =>
       s.id === submissionId ? { ...s, detectionStatus: 'Completed' } : s
     ));
+    fetchData(); // Refresh to get latest data for validation page
     setCurrentView('supervisor-validation');
   };
 
@@ -177,9 +192,11 @@ export default function App() {
     ));
   };
 
-  const handleUpdateWorkLog = (itemId, workLog) => {
+  const handleUpdateWorkLog = (itemId, newLogEntry) => {
     setMaintenanceItems(prev => prev.map(item =>
-      item.id === itemId ? { ...item, workLog } : item
+      item.id === itemId
+        ? { ...item, workLogs: [...(item.workLogs || []), newLogEntry] }
+        : item
     ));
   };
 
@@ -263,7 +280,6 @@ export default function App() {
                     <DropdownMenuLabel>Demo Role</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {users
-                      .filter((user) => user.name !== 'Maria Garcia')
                       .map((user) => (
                         <DropdownMenuItem
                           key={user.id}
@@ -345,6 +361,7 @@ export default function App() {
         {currentView === 'maintenance-list' && (
           <MaintenanceList
             items={maintenanceItems}
+            currentUser={currentUser}
             onViewDetails={handleViewMaintenanceDetail}
             onUpdateStatus={handleUpdateMaintenanceStatus}
           />

@@ -181,74 +181,70 @@ export function SupervisorValidation({ submissions, onReview }) {
         </div>
       </div>
 
-      <Card>
-        <CardContent>
-          <div className="py-4 space-y-3">
-            {filteredSubmissions.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                {submissions.length === 0
-                  ? 'No submissions pending review'
-                  : `No submissions with "${statusFilter}" status`}
-              </div>
-            ) : (
-              filteredSubmissions.map((submission) => {
-                const faultCount =
-                  submission.detectionResults?.reduce(
-                    (sum, r) => sum + r.boundingBoxes.length,
-                    0
-                  ) || 0;
-
-                const validationStatus = getValidationStatus(submission);
-                const isValidated = validationStatus === 'Approved' || validationStatus === 'Rejected';
-
-                return (
-                  <div
-                    key={submission.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="grid grid-cols-2 gap-1 w-20 h-20 flex-shrink-0">
-                        {submission.images.slice(0, 4).map((img, idx) => (
-                          <div key={idx} className="rounded overflow-hidden bg-gray-100">
-                            <img
-                              src={img.imageUrl}
-                              alt={img.side}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-semibold">{submission.pillarId}</h4>
-                          {submission.overallRisk && getRiskBadge(submission.overallRisk)}
-                          {getValidationBadge(validationStatus)}
-
-                        </div>
-                        <p className="text-sm text-gray-600">{submission.address}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Submitted: {formatDate(submission.submittedAt)} •{' '}
-                          {submission.submittedBy}
-                        </p>
-                      </div>
-                    </div>
-
-                    <Button
-                      variant={isValidated ? 'secondary' : 'outline'}
-                      size="sm"
-                      onClick={() => onReview(submission.id)}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      {isValidated ? 'View' : 'Review'}
-                    </Button>
-                  </div>
-                );
-              })
-            )}
+      <div className="space-y-3">
+        {filteredSubmissions.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            {submissions.length === 0
+              ? 'No submissions pending review'
+              : `No submissions with "${statusFilter}" status`}
           </div>
-        </CardContent>
-      </Card>
+        ) : (
+          filteredSubmissions.map((submission) => {
+            const faultCount =
+              submission.detectionResults?.reduce(
+                (sum, r) => sum + r.boundingBoxes.length,
+                0
+              ) || 0;
+
+            const validationStatus = getValidationStatus(submission);
+            const isValidated = validationStatus === 'Approved' || validationStatus === 'Rejected';
+
+            return (
+              <div
+                key={submission.id}
+                className="flex items-center justify-between p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-all"
+              >
+                <div className="flex items-center gap-4 flex-1">
+                  <div className="grid grid-cols-2 gap-1 w-20 h-20 flex-shrink-0">
+                    {submission.images.slice(0, 4).map((img, idx) => (
+                      <div key={idx} className="rounded overflow-hidden bg-gray-100">
+                        <img
+                          src={img.imageUrl}
+                          alt={img.side}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-semibold">{submission.pillarId}</h4>
+                      {submission.overallRisk && getRiskBadge(submission.overallRisk)}
+                      {getValidationBadge(validationStatus)}
+
+                    </div>
+                    <p className="text-sm text-gray-600">{submission.address}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Submitted: {formatDate(submission.submittedAt)} •{' '}
+                      {submission.submittedBy}
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  variant={isValidated ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => onReview(submission.id)}
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  {isValidated ? 'View' : 'Review'}
+                </Button>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
