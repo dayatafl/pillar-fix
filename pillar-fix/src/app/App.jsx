@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ClipboardCheck, CheckSquare, Wrench, BarChart3, Menu, X, 
   Map, Users as UsersIcon, LogOut, ChevronDown, ShieldCheck, 
@@ -55,14 +55,10 @@ export default function App() {
   const selectedSubmission = submissions.find(s => s.id === selectedSubmissionId);
   const selectedMaintenance = maintenanceItems.find(m => m.id === selectedMaintenanceId);
 
-  const fetchData = useCallback(() => {
+  const fetchData = () => {
     if (!isAuthenticated) return;
     api.get("/tasks").then(({ data }) => setAuditTasks(data)).catch(console.error);
     api.get("/submissions").then(({ data }) => setSubmissions(data)).catch(console.error);
-    api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
-  }, [isAuthenticated]);
-
-  const fetchMaintenance = () => {
     api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
   };
 
@@ -72,14 +68,6 @@ export default function App() {
     fetchData();
     api.get("/users").then(({ data }) => setUsers(data)).catch(console.error);
   }, [isAuthenticated]);
-
-  // Poll for fresh data every 10 seconds on live-data views
-  useEffect(() => {
-    const pollingViews = ['supervisor-validation', 'tech-dashboard', 'supervisor-review'];
-    if (!isAuthenticated || !pollingViews.includes(currentView)) return;
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated, currentView, fetchData]);
 
   // Auth handlers
   const handleLogin = (user, isSwitching = false) => {
@@ -120,32 +108,16 @@ export default function App() {
   };
 
   const handleSubmitAudit = (submission) => {
-    setSubmissions(prev => {
-      const exists = prev.find(s => s.taskId === submission.taskId);
-      if (exists) {
-        return prev.map(s => s.taskId === submission.taskId ? submission : s);
-      }
-      return [submission, ...prev];
-    });
-    setAuditTasks(prev => prev.map(t =>
-      t.id === submission.taskId ? { ...t, status: 'Submitted' } : t
-    ));
+    fetchData();
     setCurrentView('tech-dashboard');
   };
 
-  const handleAssignTask = (taskId, technicianName) => {
-    setAuditTasks(prev =>
-      prev.map(task =>
-        task.id === taskId ? { ...task, assignedTo: technicianName } : task
-      )
-    );
+  const handleAssignTask = () => {
+    fetchData();
   };
 
-  const handleSendToSupervisor = (submissionId) => {
-    setSubmissions(prev => prev.map(s =>
-      s.id === submissionId ? { ...s, detectionStatus: 'Completed' } : s
-    ));
-    fetchData(); // Refresh to get latest data for validation page
+  const handleSendToSupervisor = () => {
+    fetchData();
     setCurrentView('supervisor-validation');
   };
 
@@ -155,28 +127,13 @@ export default function App() {
   };
 
   // Maintenance & Supervisor Handlers
-  const handleApproveForMaintenance = (submissionId, approvalData) => {
-    setSubmissions(prev => prev.map(s =>
-      s.id === submissionId
-        ? { ...s, validated: true, validationStatus: 'Approved', approvalData }
-        : s
-    ));
-    const submission = submissions.find(s => s.id === submissionId);
-    if (submission) {
-      setAuditTasks(prev => prev.map(t =>
-        t.id === submission.taskId ? { ...t, status: 'Validated' } : t
-      ));
-    }
-    fetchMaintenance();
+  const handleApproveForMaintenance = () => {
+    fetchData();
     setCurrentView('supervisor-validation');
   };
 
-  const handleRejectSubmission = (submissionId, reason) => {
-    setSubmissions(prev => prev.map(s =>
-      s.id === submissionId
-        ? { ...s, validated: true, validationStatus: 'Rejected', rejectionReason: reason }
-        : s
-    ));
+  const handleRejectSubmission = () => {
+    fetchData();
     toast.info('Submission rejected');
     setCurrentView('supervisor-validation');
   };
@@ -186,24 +143,16 @@ export default function App() {
     setCurrentView('maintenance-detail');
   };
 
-  const handleUpdateMaintenanceStatus = (itemId, newStatus) => {
-    setMaintenanceItems(prev => prev.map(item =>
-      item.id === itemId ? { ...item, status: newStatus } : item
-    ));
+  const handleUpdateMaintenanceStatus = () => {
+    fetchData();
   };
 
-  const handleUpdateWorkLog = (itemId, newLogEntry) => {
-    setMaintenanceItems(prev => prev.map(item =>
-      item.id === itemId
-        ? { ...item, workLogs: [...(item.workLogs || []), newLogEntry] }
-        : item
-    ));
+  const handleUpdateWorkLog = () => {
+    fetchData();
   };
 
-  const handleSubmitCompletion = (itemId) => {
-    setMaintenanceItems(prev => prev.map(item =>
-      item.id === itemId ? { ...item, status: 'Completed' } : item
-    ));
+  const handleSubmitCompletion = () => {
+    fetchData();
     setCurrentView('maintenance-list');
   };
 
@@ -303,10 +252,68 @@ export default function App() {
             </nav>
 
             <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="lg:hidden p-2">
-              <Menu className="h-6 w-6" />
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
           </div>
         </div>
+
+        {/* Mobile menu panel */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden border-t bg-white px-4 py-3 space-y-1">
+            {menuItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => { setCurrentView(item.view); setMobileMenuOpen(false); }}
+                className={"w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors " +
+                  (currentView === item.view ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-100")}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </button>
+            ))}
+            <div className="pt-2 border-t mt-2 space-y-1">
+              {/* Current user info */}
+              <div className="flex items-center gap-3 px-3 py-2">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-blue-100 text-blue-700 font-bold text-xs">
+                    {currentUser.name.split(' ').map(n => n[0]).join('')}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="text-sm font-medium">{currentUser.name}</p>
+                  <p className="text-xs text-gray-500 capitalize">{currentUser.role}</p>
+                </div>
+              </div>
+
+              {/* Demo role switcher */}
+              <div className="px-3 py-1">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Demo Role</p>
+                {users.map((user) => (
+                  <button
+                    key={user.id}
+                    onClick={() => { handleLogin(user, true); setMobileMenuOpen(false); }}
+                    className={"w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm transition-colors " +
+                      (currentUser.id === user.id ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-100")}
+                  >
+                    {getRoleIcon(user.role)}
+                    <div className="flex flex-col items-start">
+                      <span className="text-sm">{user.name}</span>
+                      <span className="text-xs text-gray-500 capitalize">{user.role}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -318,7 +325,7 @@ export default function App() {
             onViewAIResult={handleViewAIResultFromTask}
             currentUser={currentUser}
             technicians={users}
-            onUpdateTasks={setAuditTasks}
+            onUpdateTasks={fetchData}
             onAssignTask={handleAssignTask}
           />
         )}

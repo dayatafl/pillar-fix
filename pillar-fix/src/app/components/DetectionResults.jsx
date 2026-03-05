@@ -271,10 +271,6 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
                 <p className="font-medium">{submission.pillarId}</p>
               </div>
               <div>
-                <span className="text-gray-600">Location:</span>
-                <p className="font-medium">{submission.location}</p>
-              </div>
-              <div>
                 <span className="text-gray-600">Address:</span>
                 <p className="font-medium">{submission.address}</p>
               </div>

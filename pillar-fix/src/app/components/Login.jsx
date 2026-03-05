@@ -63,7 +63,7 @@ export function Login({ onLogin }) {
         <CardContent className="pt-8">
           <form onSubmit={handleSubmit} className="space-y-4 pt-4">
             <div className="space-y-2">
-              <Label htmlFor="emailOrUsername">Email or Username</Label>
+              <Label htmlFor="emailOrUsername">Email</Label>
               <Input
                 id="emailOrUsername"
                 type="text"

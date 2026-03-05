@@ -468,7 +468,6 @@ async def create_task(task: TaskCreate, db: db_dependency):
     for tech in technicians:
         # Determine tech's approximate location
         centroid = _technician_centroid(tech.employeeId, db)
-        print(centroid)
         if centroid is None:
             centroid = _locality_centroid(tech.locality, db) if tech.locality else None
         if centroid is None:
@@ -476,7 +475,6 @@ async def create_task(task: TaskCreate, db: db_dependency):
             continue
 
         distance = _haversine_km(target_lat, target_lng, centroid[0], centroid[1])
-        print(distance)
         workload = db.query(Task).filter(
             Task.assigned_to == tech.employeeId,
             Task.task_status.in_(active_statuses),

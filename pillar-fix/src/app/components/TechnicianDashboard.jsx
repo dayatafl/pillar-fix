@@ -38,8 +38,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
         created_by: currentUser?.employeeId,
       });
 
-      const { data } = await api.get('/tasks');
-      onUpdateTasks(data);
+      onUpdateTasks();
 
       toast.success(`Task for ${newTask.pillarId} created successfully`);
       setIsCreateDialogOpen(false);
