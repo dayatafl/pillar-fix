@@ -1,5 +1,4 @@
-import { useState, useRef } from 'react';
-import { ArrowLeft, Upload, Plus, Calendar, Check, Clock } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';import { ArrowLeft, Upload, Plus, Calendar, Check, Clock, Camera, X, RotateCcw } from 'lucide-react';
 import api from '@/app/api';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -9,13 +8,149 @@ import { Label } from '@/app/components/ui/label';
 import { Input } from '@/app/components/ui/input';
 import { toast } from 'sonner';
 
+const SIDES = ['Front', 'Right', 'Back', 'Left'];
+
+function CameraModal({ onCapture, onClose, withSides = false }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const [facingMode, setFacingMode] = useState('environment');
+  const [activeSide, setActiveSide] = useState(0);
+  const [capturedSides, setCapturedSides] = useState({});
+
+  const startStream = (mode) => {
+    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: mode } })
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      })
+      .catch(() => onClose());
+  };
+
+  useEffect(() => {
+    startStream(facingMode);
+    return () => streamRef.current?.getTracks().forEach((t) => t.stop());
+  }, []);
+
+  const handleFlip = () => {
+    const next = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(next);
+    startStream(next);
+  };
+
+  const handleSnap = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg');
+
+    if (withSides) {
+      const updated = { ...capturedSides, [activeSide]: dataUrl };
+      setCapturedSides(updated);
+      onCapture(dataUrl);
+      const nextSide = SIDES.findIndex((_, i) => i !== activeSide && !updated[i]);
+      if (nextSide !== -1) setActiveSide(nextSide);
+    } else {
+      onCapture(dataUrl);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      onClose();
+    }
+  };
+
+  const handleClose = () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-black">
+      {/* Top Bar */}
+      <div className="relative flex items-center justify-between px-5 pt-4 pb-2 z-10">
+        <span className="text-white text-sm font-medium">
+          Capturing:{' '}
+          <span className="text-blue-400 font-bold">
+            {withSides ? `${SIDES[activeSide].toUpperCase()} SIDE` : 'PHOTO'}
+          </span>
+        </span>
+
+        {withSides && (
+          <div className="absolute left-1/2 -translate-x-1/2 flex gap-1">
+            {SIDES.map((side, i) => (
+              <button
+                key={side}
+                onClick={() => setActiveSide(i)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                  i === activeSide
+                    ? 'bg-blue-500 text-white'
+                    : capturedSides[i]
+                    ? 'bg-gray-500 text-white'
+                    : 'bg-gray-700 text-gray-300'
+                }`}
+              >
+                {side}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <button onClick={handleClose} className="text-white">
+          <X className="h-6 w-6" />
+        </button>
+      </div>
+
+      {/* Camera Feed */}
+      <div className="relative flex-1 overflow-hidden">
+        <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+        <canvas ref={canvasRef} className="hidden" />
+
+        {/* Corner brackets */}
+        {[
+          'top-4 left-4 border-t-2 border-l-2',
+          'top-4 right-4 border-t-2 border-r-2',
+          'bottom-4 left-4 border-b-2 border-l-2',
+          'bottom-4 right-4 border-b-2 border-r-2',
+        ].map((cls, i) => (
+          <div key={i} className={`absolute w-8 h-8 border-white ${cls}`} />
+        ))}
+      </div>
+
+      {/* Bottom Controls */}
+      <div className="relative flex items-center justify-center px-8 py-6 bg-black">
+        <button
+          onClick={handleFlip}
+          className="absolute left-8 flex flex-col items-center gap-1 text-white"
+        >
+          <RotateCcw className="h-6 w-6" />
+          <span className="text-xs">Flip</span>
+        </button>
+
+        <button
+          onClick={handleSnap}
+          className="w-16 h-16 rounded-full bg-white shadow-lg active:scale-95 transition-transform"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, onSubmitCompletion, onUpdateStatus }) {
   const [workLogAction, setWorkLogAction] = useState('');
   const [workLogNotes, setWorkLogNotes] = useState('');
   const [workLogImages, setWorkLogImages] = useState([]);
   const [completionImages, setCompletionImages] = useState([]);
+  const [showWorkLogCamera, setShowWorkLogCamera] = useState(false);
+  const [showCompletionCamera, setShowCompletionCamera] = useState(false);
+
   const fileInputRef = useRef(null);
   const workLogFileInputRef = useRef(null);
+
+  const handleTakePhoto = (setShowCamera) => {
+    setShowCamera(true);
+  };
 
   const handleAddWorkLog = async () => {
     if (!workLogAction.trim() || !workLogNotes.trim()) {
@@ -47,9 +182,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
     const files = Array.from(e.target.files || []);
     files.forEach(file => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setWorkLogImages(prev => [...prev, reader.result]);
-      };
+      reader.onloadend = () => setWorkLogImages(prev => [...prev, reader.result]);
       reader.readAsDataURL(file);
     });
   };
@@ -83,15 +216,28 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
     const files = Array.from(e.target.files || []);
     files.forEach(file => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setCompletionImages(prev => [...prev, reader.result]);
-      };
+      reader.onloadend = () => setCompletionImages(prev => [...prev, reader.result]);
       reader.readAsDataURL(file);
     });
   };
 
   return (
     <div className="space-y-6">
+      {/* Camera Modals */}
+      {showWorkLogCamera && (
+        <CameraModal
+          onCapture={(dataUrl) => setWorkLogImages(prev => [...prev, dataUrl])}
+          onClose={() => setShowWorkLogCamera(false)}
+        />
+      )}
+      {showCompletionCamera && (
+        <CameraModal
+          withSides
+          onCapture={(dataUrl) => setCompletionImages(prev => [...prev, dataUrl])}
+          onClose={() => setShowCompletionCamera(false)}
+        />
+      )}
+
       <div className="flex items-center gap-4">
         <Button variant="outline" onClick={onBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -141,7 +287,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                   )
                 }
               </div>
-              
+
               <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                 <h4 className="font-semibold mb-2">Detected Faults:</h4>
                 <div className="flex flex-wrap gap-2">
@@ -176,8 +322,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                         </div>
                       </div>
                       <p className="text-xs text-gray-500 mt-2">By: {log.logged_by_name}</p>
-                      
-                      {/* Display work log images if available */}
+
                       {log.images && log.images.length > 0 && (
                         <div className="mt-3">
                           <p className="text-xs text-gray-600 mb-2">Evidence Photos:</p>
@@ -199,9 +344,6 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
               </div>
 
               {item.status !== 'Completed' && item.status !== 'Verified' && (
-                
-                //Add Work Log Form//
-
                 <div className="space-y-4 pt-4 border-t">
                   <h4 className="font-semibold">Add Work Log</h4>
 
@@ -225,8 +367,11 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                       rows={3}
                     />
                   </div>
+
                   <div>
-                    <Label htmlFor="images" className="block mb-2">Images</Label>
+                    <Label className="block mb-2">Images</Label>
+
+                    {/* Hidden input for file upload */}
                     <input
                       ref={workLogFileInputRef}
                       type="file"
@@ -235,37 +380,50 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                       onChange={handleWorkLogImageSelect}
                       className="hidden"
                     />
-
-                    <Button
-                      variant="outline"
-                      onClick={() => workLogFileInputRef.current?.click()}
-                      className="w-full"
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload Work Log Images ({workLogImages.length})
-                    </Button>
+                    <div className="space-y-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => handleTakePhoto(setShowWorkLogCamera)}
+                        className="w-full"
+                      >
+                        <Camera className="h-4 w-4 mr-2" />
+                        Take Photo
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => workLogFileInputRef.current?.click()}
+                        className="w-full"
+                      >
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload Work Log Images ({workLogImages.length})
+                      </Button>
+                    </div>
 
                     {workLogImages.length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
-                    {workLogImages.map((img, idx) => (
-                      <div key={idx} className="relative">
-                        <img
-                          src={img}
-                          alt={`Work Log ${idx + 1}`}
-                          className="w-full h-24 object-cover rounded-lg border"
-                        />
-                        <button
-                          onClick={() => setWorkLogImages(prev => prev.filter((_, i) => i !== idx))}
-                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
-                        >
-                          ✕
-                        </button>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                        {workLogImages.map((img, idx) => (
+                          <div key={idx} className="relative">
+                            <img
+                              src={img}
+                              alt={`Work Log ${idx + 1}`}
+                              className="w-full h-24 object-cover rounded-lg border"
+                            />
+                            <button
+                              onClick={() => setWorkLogImages(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-                  </div>
-                  <Button onClick={() => {handleAddWorkLog(); onUpdateStatus(item.id, 'In Progress');}} className="w-full">
+
+                  <Button
+                    onClick={() => { handleAddWorkLog(); onUpdateStatus(item.id, 'In Progress'); }}
+                    className="w-full"
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Work Log
                   </Button>
@@ -274,7 +432,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
             </CardContent>
           </Card>
 
-          {/* Completion Evidence */}
+          {/* Completion Evidence - Upload Form */}
           {item.status === 'In Progress' && (
             <Card>
               <CardHeader>
@@ -285,6 +443,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                   Upload images from all 4 sides of the pillar after maintenance completion
                 </p>
 
+                {/* Hidden inputs */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -293,42 +452,47 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                   onChange={handleImageSelect}
                   className="hidden"
                 />
-
-                <Button
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full"
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Completion Images ({completionImages.length}/4)
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handleTakePhoto(setShowCompletionCamera)}
+                    className="w-full"
+                  >
+                    <Camera className="h-4 w-4 mr-2" />
+                    Take Photo
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload Completion Images ({completionImages.length}/4)
+                  </Button>
+                </div>
 
                 {completionImages.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  {completionImages.map((img, idx) => (
-                    <div key={idx} className="relative">
-                      <img
-                        src={img}
-                        alt={`Completion ${idx + 1}`}
-                        className="w-full h-24 object-cover rounded-lg border"
-                      />
-                      <button
-                        onClick={() => setCompletionImages(prev => prev.filter((_, i) => i !== idx))}
-                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {completionImages.map((img, idx) => (
+                      <div key={idx} className="relative">
+                        <img
+                          src={img}
+                          alt={`Completion ${idx + 1}`}
+                          className="w-full h-24 object-cover rounded-lg border"
+                        />
+                        <button
+                          onClick={() => setCompletionImages(prev => prev.filter((_, i) => i !== idx))}
+                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {completionImages.length >= 4 && (
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    onClick={handleSubmitCompletion}
-                  >
+                  <Button className="w-full" size="lg" onClick={handleSubmitCompletion}>
                     Submit
                   </Button>
                 )}
@@ -336,7 +500,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
             </Card>
           )}
 
-          {/* Completion Evidence */}
+          {/* Completion Evidence - View */}
           {item.status === 'Completed' && item.completion && (
             <Card>
               <CardHeader>
@@ -355,11 +519,8 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-center py-4">
-                    No completion images available
-                  </p>
+                  <p className="text-gray-500 text-center py-4">No completion images available</p>
                 )}
-
                 <p className="text-xs text-gray-500">
                   Submitted: {new Date(item.completion.timestamp).toLocaleString()}
                 </p>
@@ -382,7 +543,6 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                 </div>
               </div>
 
-              {/* Status Update Buttons */}
               {onUpdateStatus && item.status !== 'Completed' && item.status !== 'Verified' && (
                 <div className="space-y-2">
                   <Label className="text-gray-600">Update Status</Label>
