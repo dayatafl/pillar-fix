@@ -92,14 +92,18 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
+      <div className="flex items-center gap-3 sm:gap-4">
+        <Button
+          variant="outline"
+          onClick={onBack}
+          className="h-9 w-9 p-0 sm:h-9 sm:w-auto sm:px-4 sm:py-2"
+        >
+          <ArrowLeft className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Back</span>
         </Button>
-        <div>
-          <h2 className="text-3xl font-bold">Maintenance Details</h2>
-          <p className="text-gray-600 mt-1">{item.pillarId}</p>
+        <div className="min-w-0">
+          <h2 className="text-2xl sm:text-3xl font-bold leading-tight">Maintenance Details</h2>
+          <p className="text-gray-600 mt-1 truncate">{item.pillarId}</p>
         </div>
       </div>
 
