@@ -9,9 +9,87 @@ from database import engine, SessionLocal
 from datetime import datetime
 import uuid
 import math
+import base64
+import os
+from dotenv import load_dotenv
+from google.cloud import storage as gcs
+
+load_dotenv()  # loads .env file from the backend directory
 
 
 app = FastAPI()
+
+# ── Google Cloud Storage ─────────────────────────────────────────────────────
+GCS_BUCKET = os.getenv("GCS_BUCKET_NAME", "")
+GCS_KEY_FILE = os.getenv("GCS_KEY_FILE", "")  # explicit path — does NOT affect Cloud SQL ADC
+GCS_SIGNED_URL_EXPIRY_MINUTES = int(os.getenv("GCS_SIGNED_URL_EXPIRY_MINUTES", "60"))
+
+
+def _gcs_client():
+    """Build a GCS client using the explicit key file, never touching ADC."""
+    if GCS_KEY_FILE and os.path.exists(GCS_KEY_FILE):
+        from google.oauth2 import service_account
+        creds = service_account.Credentials.from_service_account_file(
+            GCS_KEY_FILE,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+        return gcs.Client(credentials=creds)
+    return gcs.Client()  # fallback to ADC if no key file set
+
+
+def upload_image_to_gcs(base64_data: str, destination_blob: str) -> str:
+    """
+    Upload a base64-encoded image to GCS (private bucket).
+    Returns the blob path — sign at read time with get_signed_url().
+    Falls back to returning raw base64 if GCS is not configured.
+    """
+    if not GCS_BUCKET:
+        return base64_data
+
+    if "," in base64_data:
+        header, b64 = base64_data.split(",", 1)
+        content_type = header.split(":")[1].split(";")[0] if ":" in header else "image/jpeg"
+    else:
+        b64 = base64_data
+        content_type = "image/jpeg"
+
+    image_bytes = base64.b64decode(b64)
+    client = _gcs_client()
+    bucket = client.bucket(GCS_BUCKET)
+    blob = bucket.blob(destination_blob)
+    blob.upload_from_string(image_bytes, content_type=content_type)
+    return destination_blob
+
+
+def get_signed_url(blob_path: str, expiry_minutes: int = GCS_SIGNED_URL_EXPIRY_MINUTES) -> str:
+    """Generate a signed URL for a private GCS blob. Valid for expiry_minutes."""
+    if not GCS_BUCKET:
+        return blob_path
+    if blob_path.startswith("data:") or blob_path.startswith("http"):
+        return blob_path
+
+    from datetime import timedelta
+    if GCS_KEY_FILE and os.path.exists(GCS_KEY_FILE):
+        from google.oauth2 import service_account
+        creds = service_account.Credentials.from_service_account_file(
+            GCS_KEY_FILE,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+        client = gcs.Client(credentials=creds)
+    else:
+        client = gcs.Client()
+    bucket = client.bucket(GCS_BUCKET)
+    blob = bucket.blob(blob_path)
+    return blob.generate_signed_url(
+        version="v4",
+        expiration=timedelta(minutes=expiry_minutes),
+        method="GET",
+    )
+
+
+def sign_image_list(paths: list) -> list:
+    """Convenience wrapper — sign a list of blob paths."""
+    return [get_signed_url(p) for p in paths if p]
 
 app.add_middleware(
     CORSMiddleware,
@@ -145,61 +223,6 @@ def compute_overall_risk(detections: list[dict]) -> str:
     if len(detections) > 1:
         return "Medium"
     return "Low"
-
-def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Return great-circle distance in km between two (lat, lng) points."""
-    R = 6371.0
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lng2 - lng1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-
-def _technician_centroid(tech_employee_id: str, db: Session):
-    """
-    Compute a technician's approximate location as the centroid of all
-    pillars currently assigned to them (any non-Completed task).
-    Returns (lat, lng) or None if they have no prior assignments.
-    """
-    active_statuses = ["Pending", "In Progress", "Submitted", "Validated"]
-    assigned_pillar_ids = (
-        db.query(Task.pillar_id)
-        .filter(Task.assigned_to == tech_employee_id, Task.task_status.in_(active_statuses))
-        .all()
-    )
-    if not assigned_pillar_ids:
-        return None
-
-    coords = []
-    for (pid,) in assigned_pillar_ids:
-        pillar = db.query(Pillar).filter(Pillar.pillarId == pid).first()
-        if pillar and pillar.coordinates:
-            coords.append((pillar.coordinates["lat"], pillar.coordinates["lng"]))
-
-    if not coords:
-        return None
-
-    avg_lat = sum(c[0] for c in coords) / len(coords)
-    avg_lng = sum(c[1] for c in coords) / len(coords)
-    return (avg_lat, avg_lng)
-
-
-def _locality_centroid(locality: str, db: Session):
-    """
-    Fallback: centroid of all pillars in the given locality.
-    Used when a technician has no prior task assignments.
-    """
-    pillars = db.query(Pillar).filter(Pillar.locality == locality).all()
-    coords = [
-        (p.coordinates["lat"], p.coordinates["lng"])
-        for p in pillars
-        if p.coordinates
-    ]
-    if not coords:
-        return None
-    return (sum(c[0] for c in coords) / len(coords), sum(c[1] for c in coords) / len(coords))
-
 
 
 # ---------------------------------------------------------------------------
@@ -433,12 +456,74 @@ async def get_tasks(db: db_dependency):
     ]
 
 
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Return great-circle distance in km between two (lat, lng) points."""
+    R = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lng2 - lng1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _technician_centroid(tech_employee_id: str, db: Session):
+    """
+    Compute a technician's approximate location as the centroid of all
+    pillars currently assigned to them (any non-Completed task).
+    Returns (lat, lng) or None if they have no prior assignments.
+    """
+    active_statuses = ["Pending", "In Progress", "Submitted", "Validated"]
+    assigned_pillar_ids = (
+        db.query(Task.pillar_id)
+        .filter(Task.assigned_to == tech_employee_id, Task.task_status.in_(active_statuses))
+        .all()
+    )
+    if not assigned_pillar_ids:
+        return None
+
+    coords = []
+    for (pid,) in assigned_pillar_ids:
+        pillar = db.query(Pillar).filter(Pillar.pillarId == pid).first()
+        if pillar and pillar.coordinates:
+            coords.append((pillar.coordinates["lat"], pillar.coordinates["lng"]))
+
+    if not coords:
+        return None
+
+    avg_lat = sum(c[0] for c in coords) / len(coords)
+    avg_lng = sum(c[1] for c in coords) / len(coords)
+    return (avg_lat, avg_lng)
+
+
+def _locality_centroid(locality: str, db: Session):
+    """
+    Fallback: centroid of all pillars in the given locality.
+    Used when a technician has no prior task assignments.
+    """
+    pillars = db.query(Pillar).filter(Pillar.locality == locality).all()
+    coords = [
+        (p.coordinates["lat"], p.coordinates["lng"])
+        for p in pillars
+        if p.coordinates
+    ]
+    if not coords:
+        return None
+    return (sum(c[0] for c in coords) / len(coords), sum(c[1] for c in coords) / len(coords))
+
+
 @app.post("/tasks")
 async def create_task(task: TaskCreate, db: db_dependency):
     """
-    Auto-assigns the first available technician in the pillar's locality.
-    Frontend 'Create Task' dialog currently works locally (mock) —
-    wire it up by calling POST /tasks with { pillar_id, due_date }.
+    Assigns the task to the nearest available technician based on geographic
+    proximity rather than strict locality matching.
+
+    Algorithm:
+    1. Compute each active technician's "base location" as the centroid of
+       their currently active assigned pillars.
+    2. If a technician has no active tasks yet, fall back to the centroid of
+       all pillars in their registered locality.
+    3. Pick the technician closest (haversine distance) to the new pillar.
+    4. Tiebreak on fewest active (non-Completed) tasks — spreads workload evenly.
     """
     pillar = db.query(Pillar).filter(Pillar.pillarId == task.pillar_id).first()
     if not pillar:
@@ -515,6 +600,7 @@ async def create_task(task: TaskCreate, db: db_dependency):
         "active_tasks": best_workload,
     }
 
+
 @app.put("/tasks/{task_id}/reassign")
 async def reassign_task(task_id: int, data: TaskReassign, db: db_dependency):
     task = db.query(Task).filter(Task.task_id == task_id).first()
@@ -561,19 +647,26 @@ async def submit_task(task_id: int, data: TaskSubmit, db: db_dependency):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Save images and location
-    task.image_1 = data.image1
-    task.image_2 = data.image2
-    task.image_3 = data.image3
-    task.image_4 = data.image4
+    # Upload images to GCS (falls back to base64 if GCS not configured)
+    sides = ["front", "right", "back", "left"]
+    raw_images = [data.image1, data.image2, data.image3, data.image4]
+    image_urls = [
+        upload_image_to_gcs(img, f"audit/task_{task_id}_{sides[i]}_{uuid.uuid4().hex[:8]}.jpg")
+        for i, img in enumerate(raw_images)
+    ]
+
+    task.image_1 = image_urls[0]
+    task.image_2 = image_urls[1]
+    task.image_3 = image_urls[2]
+    task.image_4 = image_urls[3]
     task.user_current_location = data.user_current_location   # { lat, lng }
     task.task_status = "Submitted"
     task.updated_date = datetime.utcnow()
     db.commit()
 
-    # Run AI detection
-    image_urls = [data.image1, data.image2, data.image3, data.image4]
-    ai_results = run_ai_detection(image_urls)
+    # Run AI detection (pass URLs or base64 — run_ai_detection handles both)
+    image_urls_for_ai = raw_images  # AI model still receives original base64 for inference
+    ai_results = run_ai_detection(image_urls_for_ai)
 
     inference_json = {
         "status": "Fault detected" if ai_results else "No Fault",
@@ -607,9 +700,9 @@ async def submit_task(task_id: int, data: TaskSubmit, db: db_dependency):
 
     db.commit()
 
-    # Build response in the shape DetectionResults component expects
+    # Build response — sign the stored GCS paths so frontend can render images immediately
     sides = ["front", "right", "back", "left"]
-    images = [data.image1, data.image2, data.image3, data.image4]
+    images = sign_image_list(image_urls)  # image_urls are now GCS blob paths
     overall_risk = compute_overall_risk(ai_results)
 
     detection_results = [
@@ -658,7 +751,7 @@ async def get_detection(task_id: int, db: db_dependency):
     boxes = db.query(Detection).filter(Detection.photo_id == photo.photo_id).all()
 
     sides = ["front", "right", "back", "left"]
-    images = [task.image_1, task.image_2, task.image_3, task.image_4]
+    images = sign_image_list([task.image_1, task.image_2, task.image_3, task.image_4])
 
     all_detections = [
         {
@@ -783,7 +876,7 @@ async def get_submissions(db: db_dependency):
         overall_risk = compute_overall_risk(all_detections)
 
         sides = ["front", "right", "back", "left"]
-        images_data = [r.image_1, r.image_2, r.image_3, r.image_4]
+        images_data = sign_image_list([r.image_1, r.image_2, r.image_3, r.image_4])
 
         detection_results = [
             {
@@ -859,10 +952,16 @@ async def update_maintenance(task_id: int, data: TaskMaintenance, db: db_depende
     else:
         existing_logs = []
 
+    # Upload work log images to GCS
+    uploaded_images = [
+        upload_image_to_gcs(img, f"maintenance/task_{task_id}_worklog_{uuid.uuid4().hex[:8]}.jpg")
+        for img in (data.images or [])
+    ]
+
     new_entry = {
         "action": data.action,
         "notes": data.notes,
-        "images": data.images,
+        "images": uploaded_images,
         "logged_by": data.logged_by,
         "logged_by_name": db.query(User.name).filter(User.employeeId == data.logged_by).scalar(),
         "timestamp": datetime.utcnow().isoformat(),
@@ -873,7 +972,10 @@ async def update_maintenance(task_id: int, data: TaskMaintenance, db: db_depende
     task.logged_by = data.logged_by
 
     if data.completion_evidence:
-        task.completion_evidence = data.completion_evidence
+        task.completion_evidence = upload_image_to_gcs(
+            data.completion_evidence,
+            f"maintenance/task_{task_id}_completion_{uuid.uuid4().hex[:8]}.jpg"
+        )
     if data.maintenance_validate_by:
         task.maintenance_validate_by = data.maintenance_validate_by
     if data.maintenance_status == "Completed":
@@ -934,7 +1036,7 @@ async def get_maintenance(db: db_dependency):
         faults = list(set(b.faulty_type for b in boxes))
 
         sides = ["front", "right", "back", "left"]
-        images_data = [r.image_1, r.image_2, r.image_3, r.image_4]
+        images_data = sign_image_list([r.image_1, r.image_2, r.image_3, r.image_4])
 
         previous_detections = [
             {
@@ -964,7 +1066,13 @@ async def get_maintenance(db: db_dependency):
             "notes": r.remarks,
             "faults": faults,
             "status": r.maintenance_status or "Pending",
-            "workLogs": r.work_log or [],
+            "workLogs": [
+                {
+                    **log,
+                    "images": sign_image_list(log.get("images") or [])
+                }
+                for log in (r.work_log or [])
+            ],
             "assignedTo": r.technician_name,
             "scheduledDate": r.due_date.isoformat() if r.due_date else None,
             "createdAt": r.updated_date.isoformat() if r.updated_date else None,

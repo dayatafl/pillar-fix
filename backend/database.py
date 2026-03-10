@@ -1,21 +1,31 @@
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+from google.cloud.sql.connector import Connector
 
-# Load environment variables from .env file
 load_dotenv()
 
-# Fetch variables
-USER = os.getenv("user")
-PASSWORD = os.getenv("password")
-HOST = os.getenv("host")
-PORT = os.getenv("port")
-DBNAME = os.getenv("dbname")
+USER       = os.getenv("user")
+PASSWORD   = os.getenv("password")
+DBNAME     = os.getenv("dbname")
+CONNECTION = os.getenv("connection")
 
-# Construct the SQLAlchemy connection string
-DATABASE_URL = f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DBNAME}?sslmode=require"
+# Do NOT pass credentials here — let Cloud SQL Connector use
+# Application Default Credentials (gcloud auth application-default login)
+# which is what was working before.
+_connector = Connector()
 
-engine = create_engine(DATABASE_URL) #echo=True for debugging
+def getconn():
+    return _connector.connect(
+        CONNECTION,
+        "pg8000",
+        user=USER,
+        password=PASSWORD,
+        db=DBNAME,
+    )
+
+engine = create_engine("postgresql+pg8000://", creator=getconn)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
