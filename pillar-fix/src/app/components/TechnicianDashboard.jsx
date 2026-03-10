@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MapPin, CheckCircle, Clock, AlertCircle, UserRound, ClipboardPen, Eye, CalendarDays, ChevronDownIcon, Filter} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -24,6 +24,10 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
     pillarId: '',
     dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
   });
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleCreateTask = async () => {
     if (!newTask.pillarId || !newTask.dueDate) {

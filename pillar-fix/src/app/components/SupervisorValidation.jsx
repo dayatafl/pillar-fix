@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, Filter,  CheckCircle, Siren, AlertCircle, Clock, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -13,6 +13,10 @@ import {
 
 export function SupervisorValidation({ submissions, onReview }) {
   const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString('en-MY', {

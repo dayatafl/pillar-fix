@@ -42,6 +42,10 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
   // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
 
+   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();

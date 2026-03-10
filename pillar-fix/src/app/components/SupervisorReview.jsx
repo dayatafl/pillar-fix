@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, Check, X } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -19,6 +19,10 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
   const isApproved = submission.validationStatus === 'Approved';
   const isRejected = submission.validationStatus === 'Rejected';
   const isValidated = isApproved || isRejected;
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const [severity, setSeverity] = useState(submission.approvalData?.severity || 'Medium');
   const [priority, setPriority] = useState(submission.approvalData?.priority || 'Medium');

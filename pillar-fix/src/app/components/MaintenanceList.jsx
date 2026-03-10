@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/app/components/ui/select';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Clock } from 'lucide-react';
 import { AlertCircle } from 'lucide-react';
@@ -19,6 +19,10 @@ import { Banknote } from 'lucide-react';
 export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateStatus }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   // Technicians only see items assigned to them
   const visibleItems = currentUser?.role === 'technician'

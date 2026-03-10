@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, AlertTriangle, Send, Check } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -7,6 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/ta
 
 export function DetectionResults({ submission, onBack, onSendToSupervisor, currentUser, onViewValidation }) {
   const [selectedSide, setSelectedSide] = useState('front');
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const currentResult = submission.detectionResults?.find(r => r.side === selectedSide);
   const isSupervisorOrAbove = currentUser && ['supervisor', 'manager', 'admin'].includes(currentUser.role);

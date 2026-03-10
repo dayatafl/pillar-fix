@@ -30,6 +30,10 @@ export function EnhancedMapView({
   const markersRef = useRef([]);
   const selectedMarkerRef = useRef(null);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedPillar, setSelectedPillar] = useState(null);

@@ -210,6 +210,10 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
   const [showWorkLogCamera, setShowWorkLogCamera] = useState(false);
   const [showCompletionCamera, setShowCompletionCamera] = useState(false);
 
+  useEffect(() => {
+  window.scrollTo(0, 0);
+}, []);
+
   const fileInputRef = useRef(null);
   const workLogFileInputRef = useRef(null);
 

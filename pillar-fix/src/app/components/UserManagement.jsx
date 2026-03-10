@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UserPlus, Users, Shield, Edit, CheckCircle, XCircle, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -35,6 +35,10 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
     role: 'technician',
     locality: '',
   });
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleCreateUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.username || !newUser.employeeId || !newUser.password) {

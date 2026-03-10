@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Upload, MapPin, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -63,6 +63,10 @@ export function ReportCase({ onCaseReported }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [detectedFaults, setDetectedFaults] = useState([]);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleImageSelect = (e) => {
     const file = e.target.files?.[0];

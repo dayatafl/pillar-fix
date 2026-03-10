@@ -31,6 +31,10 @@ export function AuditForm({ task, onBack, onSubmit }) {
   const streamRef = useRef(null);
   const captureToastIdRef = useRef(null);
 
+  useEffect(() => {
+  window.scrollTo(0, 0);
+}, []);
+
   const showSingleCaptureToast = (message) => {
     if (captureToastIdRef.current) toast.dismiss(captureToastIdRef.current);
     captureToastIdRef.current = toast.success(message, {
