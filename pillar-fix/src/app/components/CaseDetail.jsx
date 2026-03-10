@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ArrowLeft,
   MapPin,
@@ -33,6 +33,10 @@ const statusWorkflow = [
 export function CaseDetail({ case_, onBack, onUpdateCase }) {
   const [status, setStatus] = useState(case_.status);
   const [assignedTo, setAssignedTo] = useState(case_.assignedTo || '');
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleUpdateStatus = () => {
     const updatedCase = {

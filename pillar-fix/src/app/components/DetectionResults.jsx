@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, AlertTriangle, Send, Check } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -7,6 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/ta
 
 export function DetectionResults({ submission, onBack, onSendToSupervisor, currentUser, onViewValidation }) {
   const [selectedSide, setSelectedSide] = useState('front');
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const currentResult = submission.detectionResults?.find(r => r.side === selectedSide);
   const isSupervisorOrAbove = currentUser && ['supervisor', 'manager', 'admin'].includes(currentUser.role);
@@ -53,22 +57,26 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={onBack}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <Button
+            variant="outline"
+            onClick={onBack}
+            className="h-9 w-9 p-0 sm:h-9 sm:w-auto sm:px-4 sm:py-2"
+          >
+            <ArrowLeft className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Back</span>
           </Button>
-          <div>
-            <h2 className="text-3xl font-bold">AI Detection Results</h2>
-            <p className="text-gray-600 mt-1">{submission.pillarId}</p>
+          <div className="min-w-0">
+            <h2 className="text-2xl sm:text-3xl font-bold leading-tight">AI Detection Results</h2>
+            <p className="text-gray-600 mt-1 truncate">{submission.pillarId}</p>
           </div>
         </div>
 
         
           {/* Conditional buttons based on user role and validation status */}
           {currentUser && currentUser.role === 'supervisor' && !submission.validated && (
-            <Button onClick={() => onViewValidation(submission.id)} size="lg">
+            <Button onClick={() => onViewValidation(submission.id)} size="lg" className="w-full sm:w-auto">
               <Send className="h-5 w-5 mr-2" />
               View Validation
             </Button>
@@ -77,7 +85,7 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
           {currentUser && currentUser.role === 'supervisor' && submission.validated && (
             <Button 
               size="lg" 
-              className="bg-green-600 hover:bg-green-700 text-white cursor-not-allowed"
+              className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white cursor-not-allowed text-sm sm:text-base"
               disabled
             >
               <Check className="h-5 w-5 mr-2" />
@@ -91,7 +99,7 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
           {(submission.validationStatus === 'Approved' || submission.validationStatus === 'Rejected') ? (
             <Button
               size="lg"
-              className="bg-green-600 text-white cursor-not-allowed"
+              className="w-full sm:w-auto bg-green-600 text-white cursor-not-allowed text-sm sm:text-base"
               disabled
             >
               <Check className="h-5 w-5 mr-2" />
@@ -100,14 +108,14 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
           ) : submission.sentToSupervisor ? (
             <Button
               size="lg"
-              className="bg-blue-100 text-blue-700 cursor-not-allowed"
+              className="w-full sm:w-auto bg-blue-100 text-blue-700 cursor-not-allowed text-sm sm:text-base"
               disabled
             >
               <Send className="h-5 w-5 mr-2" />
               Sent to Supervisor
             </Button>
           ) : (
-            <Button onClick={() => onSendToSupervisor(submission.id)} size="lg">
+            <Button onClick={() => onSendToSupervisor(submission.id)} size="lg" className="w-full sm:w-auto">
               <Send className="h-5 w-5 mr-2" />
               Send to Supervisor
             </Button>

@@ -8,6 +8,10 @@ export function MapView({ cases, onCaseSelect }) {
   const mapContainerRef = useRef(null);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
   
     // Initialize map (Kuala Lumpur center)

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, Filter,  CheckCircle, Siren, AlertCircle, Clock, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -13,6 +13,10 @@ import {
 
 export function SupervisorValidation({ submissions, onReview }) {
   const [statusFilter, setStatusFilter] = useState('all');
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString('en-MY', {
@@ -167,9 +171,13 @@ export function SupervisorValidation({ submissions, onReview }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
-              <Filter className="h-4 w-4 text-gray-500" />
-              <SelectValue placeholder="Filter by status" />
+            
+            <SelectTrigger className="w-60 bg-white border rounded-md px-3 py-2 text-sm shadow-sm cursor-pointer ring-offset-white focus:ring-0 focus:ring-offset-0 font-semibold">
+              <div className="flex items-center gap-2 font-semibold">
+                <Filter className="h-4 w-4" />
+                <SelectValue placeholder="Filter by status" />
+              </div>
+              {/* Note: The Chevron is usually built into the Shadcn SelectTrigger component */}
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
@@ -200,12 +208,19 @@ export function SupervisorValidation({ submissions, onReview }) {
             const isValidated = validationStatus === 'Approved' || validationStatus === 'Rejected';
 
             return (
-              <div
-                key={submission.id}
-                className="flex items-center justify-between p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-all"
-              >
-                <div className="flex items-center gap-4 flex-1">
-                  <div className="grid grid-cols-2 gap-1 w-20 h-20 flex-shrink-0">
+              <div key={submission.id}>
+                <div className="md:hidden p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-all space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <h4 className="font-semibold text-sm break-all">{submission.pillarId}</h4>
+                    <div className="flex flex-wrap gap-2 justify-end">
+                      {submission.overallRisk && getRiskBadge(submission.overallRisk)}
+                      {getValidationBadge(validationStatus)}
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-gray-600 leading-relaxed">{submission.address}</p>
+
+                  <div className="grid grid-cols-2 gap-1 w-20 h-20">
                     {submission.images.slice(0, 4).map((img, idx) => (
                       <div key={idx} className="rounded overflow-hidden bg-gray-100">
                         <img
@@ -217,29 +232,61 @@ export function SupervisorValidation({ submissions, onReview }) {
                     ))}
                   </div>
 
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-semibold">{submission.pillarId}</h4>
-                      {submission.overallRisk && getRiskBadge(submission.overallRisk)}
-                      {getValidationBadge(validationStatus)}
-
-                    </div>
-                    <p className="text-sm text-gray-600">{submission.address}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Submitted: {formatDate(submission.submittedAt)} •{' '}
-                      {submission.submittedBy}
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <p className="text-xs text-gray-500">
+                      Submitted: {formatDate(submission.submittedAt)}
                     </p>
+                    <p className="text-xs text-gray-500">{submission.submittedBy}</p>
                   </div>
+
+                  <Button
+                    variant={isValidated ? 'secondary' : 'outline'}
+                    size="sm"
+                    className="w-full"
+                    onClick={() => onReview(submission.id)}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    {isValidated ? 'View' : 'Review'}
+                  </Button>
                 </div>
 
-                <Button
-                  variant={isValidated ? 'secondary' : 'outline'}
-                  size="sm"
-                  onClick={() => onReview(submission.id)}
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  {isValidated ? 'View' : 'Review'}
-                </Button>
+                <div className="hidden md:flex items-center justify-between p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-all">
+                  <div className="flex items-center gap-4 flex-1">
+                    <div className="grid grid-cols-2 gap-1 w-20 h-20 flex-shrink-0">
+                      {submission.images.slice(0, 4).map((img, idx) => (
+                        <div key={idx} className="rounded overflow-hidden bg-gray-100">
+                          <img
+                            src={img.imageUrl}
+                            alt={img.side}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-semibold">{submission.pillarId}</h4>
+                        {submission.overallRisk && getRiskBadge(submission.overallRisk)}
+                        {getValidationBadge(validationStatus)}
+                      </div>
+                      <p className="text-sm text-gray-600">{submission.address}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Submitted: {formatDate(submission.submittedAt)} •{' '}
+                        {submission.submittedBy}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant={isValidated ? 'secondary' : 'outline'}
+                    size="sm"
+                    onClick={() => onReview(submission.id)}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    {isValidated ? 'View' : 'Review'}
+                  </Button>
+                </div>
               </div>
             );
           })
