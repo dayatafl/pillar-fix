@@ -85,42 +85,45 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
 
   return (
     <div className="space-y-6">
-          <div className="flex items-center justify-between">
-      <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
-        <div>
-          <h2 className="text-3xl font-bold">Supervisor Review</h2>
-          <p className="text-gray-600 mt-1">{submission.pillarId}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <Button
+            variant="outline"
+            onClick={onBack}
+            className="h-9 w-9 p-0 sm:h-9 sm:w-auto sm:px-4 sm:py-2"
+          >
+            <ArrowLeft className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Back</span>
+          </Button>
+          <div className="min-w-0">
+            <h2 className="text-2xl sm:text-3xl font-bold leading-tight">Supervisor Review</h2>
+            <p className="mt-1 truncate text-gray-600">{submission.pillarId}</p>
+          </div>
         </div>
+        {isValidated && (
+          <Button
+            size="lg"
+            disabled
+            className={`w-full self-start cursor-not-allowed opacity-50 text-white sm:w-auto sm:self-auto ${
+              isApproved
+                ? 'bg-green-600 hover:bg-green-700'
+                : 'bg-red-600 hover:bg-red-700'
+            }`}
+          >
+            {isApproved ? (
+              <>
+                <Check className="h-5 w-5 mr-2" />
+                Approved
+              </>
+            ) : (
+              <>
+                <X className="h-5 w-5 mr-2" />
+                Rejected
+              </>
+            )}
+          </Button>
+        )}
       </div>
-      {isValidated && (
-
-        <Button
-          size="lg"
-          disabled
-          className={`cursor-not-allowed opacity-50 text-white ${
-            isApproved 
-              ? 'bg-green-600 hover:bg-green-700' 
-              : 'bg-red-600 hover:bg-red-700'
-          }`}
-        >
-          {isApproved ? (
-            <>
-              <Check className="h-5 w-5 mr-2" />
-              Approved
-            </>
-          ) : (
-            <>
-              <X className="h-5 w-5 mr-2" />
-              Rejected
-            </>
-          )}
-        </Button>
-      )}
-    </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">

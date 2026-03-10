@@ -29,6 +29,25 @@ export function AuditForm({ task, onBack, onSubmit }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
+  const captureToastIdRef = useRef(null);
+
+  const showSingleCaptureToast = (message) => {
+    if (captureToastIdRef.current) toast.dismiss(captureToastIdRef.current);
+    captureToastIdRef.current = toast.success(message, {
+      id: "capture-progress-toast",
+      position: "bottom-center",
+      duration: 1200,
+      style: {
+        left: "50%",
+        right: "auto",
+        transform: "translateX(-50%)",
+        margin: 0,
+        width: "fit-content",
+        maxWidth: "min(42rem, calc(100vw - 2rem))",
+        whiteSpace: "nowrap",
+      },
+    });
+  };
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop());
@@ -98,10 +117,10 @@ export function AuditForm({ task, onBack, onSubmit }) {
       const nextSide = SIDES.slice(currentIdx + 1).find(s => !updated[s.side]);
       if (nextSide) {
         setActiveSide(nextSide.side);
-        toast.success(`${activeSide.charAt(0).toUpperCase() + activeSide.slice(1)} captured — now capture ${nextSide.label}`);
+        showSingleCaptureToast(`${activeSide.charAt(0).toUpperCase() + activeSide.slice(1)} captured — now capture ${nextSide.label}`);
       } else {
         closeCamera();
-        toast.success('All 4 sides captured!');
+        showSingleCaptureToast('All 4 sides captured!');
       }
       return updated;
     });
@@ -155,7 +174,7 @@ export function AuditForm({ task, onBack, onSubmit }) {
 
       {/* Camera fullscreen modal */}
       {cameraOpen && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black flex flex-col w-screen h-[100dvh] overflow-hidden">
           {/* Top bar */}
           <div className="flex items-center justify-between px-4 py-3 bg-black/70">
             <span className="text-white font-semibold text-sm">
@@ -195,12 +214,13 @@ export function AuditForm({ task, onBack, onSubmit }) {
           ) : (
             <div className="flex-1 relative overflow-hidden">
               <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-              {/* Corner guides */}
-              <div className="absolute inset-8 pointer-events-none">
-                <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-white/60 rounded-tl" />
-                <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-white/60 rounded-tr" />
-                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-white/60 rounded-bl" />
-                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-white/60 rounded-br" />
+              {/* Corner guides — bold red framing */}
+              <div className="absolute inset-6 pointer-events-none">
+                <div className="absolute top-0 left-0 w-20 h-20 border-t-[6px] border-l-[6px] border-red-500" />
+                <div className="absolute top-0 right-0 w-20 h-20 border-t-[6px] border-r-[6px] border-red-500" />
+                <div className="absolute bottom-0 left-0 w-20 h-20 border-b-[6px] border-l-[6px] border-red-500" />
+                <div className="absolute bottom-0 right-0 w-20 h-20 border-b-[6px] border-r-[6px] border-red-500" />
+                <div className="absolute inset-0 shadow-[0_0_0_9999px_rgba(0,0,0,0.25)] pointer-events-none" />
               </div>
             </div>
           )}
@@ -223,8 +243,13 @@ export function AuditForm({ task, onBack, onSubmit }) {
 
       {/* Page header */}
       <div className="flex items-center gap-4">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-2" /> Back
+        <Button
+          variant="outline"
+          onClick={onBack}
+          className="h-9 w-9 p-0 sm:h-9 sm:w-auto sm:px-4 sm:py-2"
+        >
+          <ArrowLeft className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Back</span>
         </Button>
         <div>
           <h2 className="text-3xl font-bold">Audit Feeder Pillar</h2>
@@ -266,6 +291,14 @@ export function AuditForm({ task, onBack, onSubmit }) {
                     {images[side] ? (
                       <div className="relative">
                         <img src={images[side]} alt={`${label} side`} className="w-full h-48 object-cover rounded-lg border" />
+                        <button
+                          type="button"
+                          onClick={() => setImages(prev => ({ ...prev, [side]: '' }))}
+                          className="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/70 text-white hover:bg-red-600 transition-colors flex items-center justify-center"
+                          aria-label={`Delete ${label} photo`}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
                         <Button size="sm" variant="secondary" className="absolute bottom-2 right-2" onClick={() => openCamera(side)}>
                           <Camera className="h-3 w-3 mr-1" /> Retake
                         </Button>
