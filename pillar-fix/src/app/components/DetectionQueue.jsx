@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, Eye, CheckCircle, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
@@ -11,6 +11,10 @@ export function DetectionQueue({ submissions, onViewDetection }) {
     completed: submissions.filter(s => s.detectionStatus === 'Completed').length,
     failed: submissions.filter(s => s.detectionStatus === 'Failed').length,
   };
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString('en-AU', {

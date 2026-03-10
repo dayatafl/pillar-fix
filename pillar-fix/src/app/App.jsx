@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  ClipboardCheck, CheckSquare, Wrench, BarChart3, Menu, X, 
+  Clipboard, CheckSquare, Wrench, BarChart3, Menu, X, 
   Map, Users as UsersIcon, LogOut, ChevronDown, ShieldCheck, 
   HardHat, User, ClipboardList 
 } from 'lucide-react';
@@ -161,7 +161,7 @@ export default function App() {
     const baseItems = [
       { id: 'analytics', label: 'Analytics', icon: BarChart3, view: 'analytics', roles: ['manager', 'admin'] },
       { id: 'map', label: 'Map', icon: Map, view: 'map', roles: ['technician', 'supervisor', 'manager', 'admin'] },
-      { id: 'tech-dashboard', label: 'Audit Tasks', icon: ClipboardCheck, view: 'tech-dashboard', roles: ['technician', 'supervisor', 'manager', 'admin'] },
+      { id: 'tech-dashboard', label: 'Audit Tasks', icon: Clipboard, view: 'tech-dashboard', roles: ['technician', 'supervisor', 'manager', 'admin'] },
       { id: 'supervisor-validation', label: 'Validation', icon: CheckSquare, view: 'supervisor-validation', roles: ['supervisor', 'manager', 'admin'] },
       { id: 'maintenance-list', label: 'Maintenance', icon: Wrench, view: 'maintenance-list', roles: ['technician', 'supervisor', 'manager', 'admin'] },
       { id: 'user-management', label: 'Users', icon: UsersIcon, view: 'user-management', roles: ['admin'] },
@@ -228,20 +228,19 @@ export default function App() {
                   <DropdownMenuContent align="end" className="w-47">
                     <DropdownMenuLabel>Demo Role</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {users
-                      .map((user) => (
-                        <DropdownMenuItem
-                          key={user.id}
-                          onClick={() => handleLogin(user, true)}
-                          className={`cursor-pointer ${currentUser.id === user.id ? 'bg-blue-50' : ''}`}
-                        >
-                          {getRoleIcon(user.role)}
-                          <div className="flex flex-col">
-                            <span className="text-sm">{user.name}</span>
-                            <span className="text-[10px] text-gray-500 capitalize">{user.role}</span>
-                          </div>
-                        </DropdownMenuItem>
-                      ))}
+                    {users.map((user) => (
+                      <DropdownMenuItem
+                        key={user.id}
+                        onClick={() => handleLogin(user, true)}
+                        className={`cursor-pointer ${currentUser.id === user.id ? 'bg-blue-50' : ''}`}
+                      >
+                        {getRoleIcon(user.role)}
+                        <div className="flex flex-col">
+                          <span className="text-sm">{user.name}</span>
+                          <span className="text-[10px] text-gray-500 capitalize">{user.role}</span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout} className="text-red-600 cursor-pointer">
                       <LogOut className="mr-2 h-4 w-4" /> Logout
@@ -272,36 +271,42 @@ export default function App() {
               </button>
             ))}
             <div className="pt-2 border-t mt-2 space-y-1">
-              {/* Current user info */}
-              <div className="flex items-center gap-3 px-3 py-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-blue-100 text-blue-700 font-bold text-xs">
-                    {currentUser.name.split(' ').map(n => n[0]).join('')}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="text-sm font-medium">{currentUser.name}</p>
-                  <p className="text-xs text-gray-500 capitalize">{currentUser.role}</p>
+              <div className="flex items-center justify-between gap-2 px-3 py-2">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-blue-100 text-blue-700 font-bold text-xs">
+                      {currentUser.name.split(' ').map(n => n[0]).join('')}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{currentUser.name}</p>
+                    <p className="text-xs text-gray-500 capitalize">{currentUser.role}</p>
+                  </div>
                 </div>
-              </div>
 
-              {/* Demo role switcher */}
-              <div className="px-3 py-1">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Demo Role</p>
-                {users.map((user) => (
-                  <button
-                    key={user.id}
-                    onClick={() => { handleLogin(user, true); setMobileMenuOpen(false); }}
-                    className={"w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm transition-colors " +
-                      (currentUser.id === user.id ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-100")}
-                  >
-                    {getRoleIcon(user.role)}
-                    <div className="flex flex-col items-start">
-                      <span className="text-sm">{user.name}</span>
-                      <span className="text-xs text-gray-500 capitalize">{user.role}</span>
-                    </div>
-                  </button>
-                ))}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="inline-flex h-9 min-w-40 items-center justify-between gap-1 rounded-md border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 hover:bg-slate-100">
+                      Demo Role
+                      <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-40">
+                    {users.map((user) => (
+                      <DropdownMenuItem
+                        key={user.id}
+                        onClick={() => { handleLogin(user, true); setMobileMenuOpen(false); }}
+                        className={`cursor-pointer ${currentUser.id === user.id ? 'bg-blue-50' : ''}`}
+                      >
+                        {getRoleIcon(user.role)}
+                        <div className="flex flex-col items-start">
+                          <span className="text-sm">{user.name}</span>
+                          <span className="text-xs text-gray-500 capitalize">{user.role}</span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               <button
@@ -386,7 +391,10 @@ export default function App() {
         )}
 
         {currentView === 'analytics' && (
-          <Analytics maintenanceItems={maintenanceItems} />
+          <Analytics
+            maintenanceItems={maintenanceItems}
+            tasks={auditTasks}
+          />
         )}
 
         {currentView === 'user-management' && currentUser && (

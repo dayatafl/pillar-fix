@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+psycopg2 #window
+python-dotenv
+psycopg2-binary==2.9.9

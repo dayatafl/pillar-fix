@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle, Clock, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
+import { useEffect } from 'react';
 
 export function Dashboard({ cases }) {
   const stats = {
@@ -8,6 +9,10 @@ export function Dashboard({ cases }) {
     inProgress: cases.filter(c => c.status === 'In Progress').length,
     resolved: cases.filter(c => c.status === 'Resolved' || c.status === 'Closed').length,
   };
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const statCards = [
     {

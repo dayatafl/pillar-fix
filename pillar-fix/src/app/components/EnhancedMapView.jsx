@@ -30,6 +30,10 @@ export function EnhancedMapView({
   const markersRef = useRef([]);
   const selectedMarkerRef = useRef(null);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedPillar, setSelectedPillar] = useState(null);
@@ -209,6 +213,7 @@ export function EnhancedMapView({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pillars.length}</div>
+            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
 
@@ -219,6 +224,7 @@ export function EnhancedMapView({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pillars.filter((p) => p.status === "repaired").length}</div>
+            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
 
@@ -229,6 +235,7 @@ export function EnhancedMapView({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pillars.filter((p) => p.status === "in-progress").length}</div>
+            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
 
@@ -239,6 +246,7 @@ export function EnhancedMapView({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pillars.filter((p) => p.status === "not-examined").length}</div>
+            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
       </div>

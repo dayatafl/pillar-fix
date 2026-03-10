@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, Clock, AlertCircle, UserPlus, ClipboardCheck, Eye, CalendarDays, X, ChevronDownIcon } from 'lucide-react';
+import { MapPin, CheckCircle, Clock, AlertCircle, UserRound, ClipboardPen, Eye, CalendarDays, ChevronDownIcon, Filter} from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -17,13 +17,17 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
   const [selectedTask, setSelectedTask] = useState(null);
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('');
   const [selectedDate, setSelectedDate] = useState(undefined);
-  const [dateRange, setDateRange] = useState({});
   const [isCalendarFilterOpen, setIsCalendarFilterOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
   const [newTask, setNewTask] = useState({
     pillarId: '',
     dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
   });
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const handleCreateTask = async () => {
     if (!newTask.pillarId || !newTask.dueDate) {
@@ -64,6 +68,10 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
     );
   }
 
+  if (statusFilter !== 'all') {
+    filteredTasks = filteredTasks.filter(task => task.status === statusFilter);
+  }
+
   const tasksAllTasks = isTechnician
     ? tasks.filter(task => task.assignedTo === currentUser?.name || !task.assignedTo)
     : tasks;
@@ -72,19 +80,14 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
     tasksAllTasks.map(task => format(new Date(task.dueDate), 'yyyy-MM-dd'))
   );
 
-  const clearDateFilters = () => {
-    setSelectedDate(undefined);
-    setDateRange({});
-  };
-
   const isTaskDone = (status) => ['Completed', 'Submitted', 'Validated'].includes(status);
   const isTaskInProgress = (status) => status === 'In Progress';
 
   const stats = {
-    total: filteredTasks.length,
-    pending: filteredTasks.filter(t => t.status === 'Pending').length,
-    inProgress: filteredTasks.filter(t => isTaskInProgress(t.status)).length,
-    completed: filteredTasks.filter(t => isTaskDone(t.status)).length,
+        total: tasksAllTasks.length,
+        pending: tasksAllTasks.filter(t => t.status === 'Pending').length,
+        inProgress: tasksAllTasks.filter(t => isTaskInProgress(t.status)).length,
+        completed: tasksAllTasks.filter(t => isTaskDone(t.status)).length,
   };
 
   const groupedByLocality = filteredTasks.reduce((acc, task) => {
@@ -125,12 +128,22 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold">
-          {isTechnician ? 'My Audit Tasks' : 'Field Audit Tasks'}
-        </h2>
-        <p className="text-gray-600 mt-1">
-          {isTechnician ? 'Tasks assigned to you' : 'Feeder pillar audit assignments by locality'}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-3xl font-bold">
+              {isTechnician ? 'My Audit Tasks' : 'Field Audit Tasks'}
+            </h2>
+            <p className="text-gray-600 mt-1">
+              {isTechnician ? 'Tasks assigned to you' : 'Feeder pillar audit assignments by locality'}
+            </p>
+          </div>
+
+          {isSupervisorOrAbove && (
+            <Button onClick={() => setIsCreateDialogOpen(true)} className="h-9 w-9 p-0 sm:hidden">
+              <ClipboardPen className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Key Metrics */}
@@ -151,46 +164,62 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
 
       {/* Filters Row */}
       <div className="flex w-full justify-between items-center">
-        <div
-          className="border rounded-md px-3 py-2 text-sm bg-white flex items-center justify-between w-full md:w-64 cursor-pointer shadow-sm"
-          onClick={() => setIsCalendarFilterOpen(!isCalendarFilterOpen)}
-        >
-          <span className="flex items-center gap-2 font-semibold">
-            <CalendarDays className="h-4 w-4" />
-            Filter by Date
-            {selectedDate && <Badge variant="secondary" className="text-[10px] h-4">Active</Badge>}
-          </span>
-          <div className="flex items-center gap-1">
-            {selectedDate && (
-              <Button variant="ghost" size="sm" className="h-6 px-1" onClick={(e) => { e.stopPropagation(); clearDateFilters(); }}>
-                <X className="h-3 w-3" />
-              </Button>
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <button
+              onClick={() => setIsCalendarFilterOpen(!isCalendarFilterOpen)}
+              className="w-[13.75rem] md:w-60 bg-white border rounded-md px-3 py-2 text-sm shadow-sm cursor-pointer font-semibold flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 shrink-0" />
+                <span>{selectedDate ? format(selectedDate, 'dd MMM yyyy') : 'Filter by Date'}</span>
+                {selectedDate && <Badge variant="secondary" className="text-[10px] h-4">Active</Badge>}
+              </div>
+              <div className="flex items-center">
+                <ChevronDownIcon className="h-4 w-4 opacity-50" />
+              </div>
+            </button>
+
+            {isCalendarFilterOpen && (
+              <div className="absolute z-50 bg-white shadow-xl border rounded-lg p-2 mt-1">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => {
+                    setSelectedDate(date);
+                    setIsCalendarFilterOpen(false);
+                  }}
+                  modifiers={{ hasTask: (date) => datesWithTasks.has(format(date, 'yyyy-MM-dd')) }}
+                  modifiersStyles={{ hasTask: { fontWeight: 'bold', backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%' } }}
+                />
+              </div>
             )}
-            <ChevronDownIcon className="h-4 w-4 opacity-50" />
           </div>
+
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v)}>
+            <SelectTrigger className="w-40 md:w-60 bg-white border rounded-md px-3 py-2 text-sm shadow-sm cursor-pointer ring-offset-white focus:ring-0 focus:ring-offset-0 font-semibold">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 shrink-0" />
+                <SelectValue placeholder="All Status" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="Pending">Pending</SelectItem>
+              <SelectItem value="In Progress">In Progress</SelectItem>
+              <SelectItem value="Completed">Completed</SelectItem>
+              <SelectItem value="Submitted">Submitted</SelectItem>
+              <SelectItem value="Validated">Validated</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {isSupervisorOrAbove && (
-          <Button onClick={() => setIsCreateDialogOpen(true)} className="flex gap-2">
-            <ClipboardCheck className="h-4 w-4" /> Create Task
+          <Button onClick={() => setIsCreateDialogOpen(true)} className="hidden sm:flex gap-2">
+            <ClipboardPen className="h-4 w-4" /> Create Task
           </Button>
         )}
       </div>
-
-      {isCalendarFilterOpen && (
-        <div className="absolute z-50 bg-white shadow-xl border rounded-lg p-2 mt-[-10px]">
-          <Calendar
-            mode="single"
-            selected={selectedDate}
-            onSelect={(date) => {
-              setSelectedDate(date);
-              setIsCalendarFilterOpen(false);
-            }}
-            modifiers={{ hasTask: (date) => datesWithTasks.has(format(date, 'yyyy-MM-dd')) }}
-            modifiersStyles={{ hasTask: { fontWeight: 'bold', backgroundColor: '#3b82f6', color: 'white', borderRadius: '50%' } }}
-          />
-        </div>
-      )}
 
       {/* Tasks by Locality */}
       <div className="space-y-8">
@@ -203,52 +232,87 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
 
             <div className="space-y-3">
               {localityTasks.map((task) => (
-                <div key={task.id} className="flex items-center justify-between p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-all">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <h4 className="font-semibold">{task.pillarId}</h4>
+                <div key={task.id}>
+                  <div className="md:hidden p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-all space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <h4 className="font-semibold text-sm break-all">{task.pillarId}</h4>
                       <Badge variant={isTaskDone(task.status) ? 'default' : 'outline'}>{task.status}</Badge>
+                    </div>
+
+                    <p className="text-sm text-gray-600 leading-relaxed">{task.address}</p>
+
+                    <div className="flex flex-wrap items-center gap-2">
                       {task.assignedTo && (
                         <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
-                          <UserPlus className="h-3 w-3 mr-1" />
+                          <UserRound className="h-3 w-3 mr-1" />
                           {task.assignedTo}
                         </Badge>
                       )}
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <CalendarDays className="h-3 w-3" />
+                        Due: {new Date(task.dueDate).toLocaleDateString()}
+                      </span>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1 flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      {task.address}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Due: {new Date(task.dueDate).toLocaleDateString()}
-                    </p>
+
+                    <div className="flex gap-2">
+                      {isSupervisorOrAbove && onAssignTask && !isTaskDone(task.status) && (
+                        <Button onClick={() => handleAssignClick(task)} variant="outline" size="sm" className="flex-1">
+                          {task.assignedTo ? 'Reassign' : 'Assign'}
+                        </Button>
+                      )}
+
+                      {isTaskDone(task.status) ? (
+                        <Button onClick={() => onViewAIResult(task.id)} variant="outline" size="sm" className="flex-1">
+                          <Eye className="h-4 w-4 mr-1" />
+                          View AI Result
+                        </Button>
+                      ) : (
+                        <Button onClick={() => onStartAudit(task.id)} size="sm" className="flex-1">
+                          {task.status === 'In Progress' ? 'Continue' : 'Start Audit'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex gap-2">
-                    {isSupervisorOrAbove && onAssignTask && !isTaskDone(task.status) && (
-                      <Button onClick={() => handleAssignClick(task)} variant="outline" size="sm">
-                        {task.assignedTo ? 'Reassign' : 'Assign'}
-                      </Button>
-                    )}
+                  <div className="hidden md:flex items-center justify-between p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-all">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <h4 className="font-semibold">{task.pillarId}</h4>
+                        <Badge variant={isTaskDone(task.status) ? 'default' : 'outline'}>{task.status}</Badge>
+                        {task.assignedTo && (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                            <UserRound className="h-3 w-3 mr-1" />
+                            {task.assignedTo}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1 flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        {task.address}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Due: {new Date(task.dueDate).toLocaleDateString()}
+                      </p>
+                    </div>
 
-                    <Button
-                      onClick={() => onStartAudit(task.id)}
-                      disabled={isTaskDone(task.status)}
-                      size="sm"
-                    >
-                      {isTaskDone(task.status)
-                        ? task.status
-                        : task.status === 'In Progress'
-                        ? 'Continue'
-                        : 'Start Audit'}
-                    </Button>
+                    <div className="flex gap-2">
+                      {isSupervisorOrAbove && onAssignTask && !isTaskDone(task.status) && (
+                        <Button onClick={() => handleAssignClick(task)} variant="outline" size="sm">
+                          {task.assignedTo ? 'Reassign' : 'Assign'}
+                        </Button>
+                      )}
 
-                    {isTaskDone(task.status) && (
-                      <Button onClick={() => onViewAIResult(task.id)} variant="outline" size="sm">
-                        <Eye className="h-4 w-4 mr-1" />
-                        View AI Result
-                      </Button>
-                    )}
+                      {isTaskDone(task.status) ? (
+                        <Button onClick={() => onViewAIResult(task.id)} variant="outline" size="sm">
+                          <Eye className="h-4 w-4 mr-1" />
+                          View AI Result
+                        </Button>
+                      ) : (
+                        <Button onClick={() => onStartAudit(task.id)} size="sm">
+                          {task.status === 'In Progress' ? 'Continue' : 'Start Audit'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -270,7 +334,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
                 <p className="text-xs text-gray-600 mt-1">{selectedTask.location}</p>
               </div>
               <div>
-                <Label htmlFor="technician">Select Technician</Label>
+                <Label htmlFor="technician" className="block mb-2">Select Technician</Label>
                 <Select value={selectedTechnicianId} onValueChange={setSelectedTechnicianId}>
                   <SelectTrigger id="technician">
                     <SelectValue placeholder="Choose a technician..." />
