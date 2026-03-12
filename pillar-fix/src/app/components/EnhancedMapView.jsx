@@ -19,6 +19,19 @@ import { Button } from "./ui/button";
 import { Search, MapPin, Filter, X } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
+// ── Weather codes ────────────────────────────────────────────────────────────
+const WMO_CODES = {
+  0:{label:"Clear Sky",emoji:"☀️"},1:{label:"Mainly Clear",emoji:"🌤️"},
+  2:{label:"Partly Cloudy",emoji:"⛅"},3:{label:"Overcast",emoji:"☁️"},
+  45:{label:"Foggy",emoji:"🌫️"},51:{label:"Light Drizzle",emoji:"🌦️"},
+  53:{label:"Drizzle",emoji:"🌦️"},55:{label:"Heavy Drizzle",emoji:"🌧️"},
+  61:{label:"Light Rain",emoji:"🌧️"},63:{label:"Rain",emoji:"🌧️"},
+  65:{label:"Heavy Rain",emoji:"🌧️"},80:{label:"Rain Showers",emoji:"🌦️"},
+  81:{label:"Showers",emoji:"🌧️"},82:{label:"Heavy Showers",emoji:"⛈️"},
+  95:{label:"Thunderstorm",emoji:"⛈️"},99:{label:"Heavy Thunderstorm",emoji:"🌩️"},
+};
+function getWeatherInfo(code){return WMO_CODES[code]||{label:"Unknown",emoji:"🌡️"};}
+
 export function EnhancedMapView({
   maintenanceItems,
   auditTasks,
@@ -30,14 +43,12 @@ export function EnhancedMapView({
   const markersRef = useRef([]);
   const selectedMarkerRef = useRef(null);
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedPillar, setSelectedPillar] = useState(null);
   const [hasMaintenanceRecord, setHasMaintenanceRecord] = useState(false);
+  const [weather, setWeather] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
 
   const getPillarStatus = (task) => {
     const maintenanceItem = maintenanceItems.find((item) => item.pillarId === task.pillarId);
@@ -73,6 +84,52 @@ export function EnhancedMapView({
     }
   }, [selectedPillar, maintenanceItems]);
 
+  // Fetch weather once on mount — centroid of all pillar coordinates
+  useEffect(() => {
+    const coords = auditTasks
+      .filter(t => t.coordinates?.lat && t.coordinates?.lng)
+      .map(t => t.coordinates);
+    const lat = coords.length
+      ? parseFloat((coords.reduce((s,c) => s + c.lat, 0) / coords.length).toFixed(4))
+      : 3.1390;
+    const lng = coords.length
+      ? parseFloat((coords.reduce((s,c) => s + c.lng, 0) / coords.length).toFixed(4))
+      : 101.6869;
+
+    fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+      `&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation` +
+      `&hourly=temperature_2m,weather_code,precipitation_probability` +
+      `&timezone=Asia%2FKuala_Lumpur&forecast_days=1`
+    )
+      .then(r => r.json())
+      .then(data => {
+        const c = data.current;
+        const h = data.hourly;
+        const nowHour = new Date().getHours();
+        const forecast = Array.from({length:6},(_,i)=>{
+          const idx = nowHour + i;
+          if (idx >= h.time.length) return null;
+          return {
+            time: new Date(h.time[idx]).toLocaleTimeString("en-MY",{hour:"2-digit",minute:"2-digit",hour12:true}),
+            temp: Math.round(h.temperature_2m[idx]),
+            code: h.weather_code[idx],
+            rainChance: h.precipitation_probability[idx],
+          };
+        }).filter(Boolean);
+        setWeather({
+          temp: Math.round(c.temperature_2m),
+          humidity: c.relative_humidity_2m,
+          windSpeed: Math.round(c.wind_speed_10m),
+          precipitation: c.precipitation,
+          code: c.weather_code,
+          forecast,
+        });
+        setWeatherLoading(false);
+      })
+      .catch(() => setWeatherLoading(false));
+  }, []); // [] = only once on mount
+
   const createMarkerIcon = (color, isSelected = false) => {
     return L.divIcon({
       className: "custom-marker",
@@ -100,7 +157,7 @@ export function EnhancedMapView({
     if (!mapContainerRef.current || mapRef.current) return;
     const map = L.map(mapContainerRef.current).setView([3.139, 101.6869], 12);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap contributors",
+      attribution: "© OpenStreetMap",
       maxZoom: 19,
     }).addTo(map);
     mapRef.current = map;
@@ -213,7 +270,6 @@ export function EnhancedMapView({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pillars.length}</div>
-            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
 
@@ -224,7 +280,6 @@ export function EnhancedMapView({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pillars.filter((p) => p.status === "repaired").length}</div>
-            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
 
@@ -235,7 +290,6 @@ export function EnhancedMapView({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pillars.filter((p) => p.status === "in-progress").length}</div>
-            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
 
@@ -246,7 +300,6 @@ export function EnhancedMapView({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{pillars.filter((p) => p.status === "not-examined").length}</div>
-            <p className="text-xs text-gray-500 mt-1">&nbsp;</p>
           </CardContent>
         </Card>
       </div>
@@ -353,6 +406,46 @@ export function EnhancedMapView({
                       <p className="text-sm">{new Date(selectedPillar.lastInspection).toLocaleDateString()}</p>
                     </div>
                   )}
+                  {/* Weather at this pillar's location */}
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase mb-1">Weather at Site</p>
+                    {weatherLoading ? (
+                      <p className="text-xs text-gray-400">Loading...</p>
+                    ) : !weather ? (
+                      <p className="text-xs text-gray-400">Unavailable</p>
+                    ) : (()=>{
+                      const {label,emoji} = getWeatherInfo(weather.code);
+                      return (
+                        <div className="rounded-lg border bg-gray-50 px-3 py-2 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">{emoji}</span>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-800">{weather.temp}°C</p>
+                                <p className="text-[10px] text-gray-500">{label}</p>
+                              </div>
+                            </div>
+                            <div className="text-[10px] text-gray-500 text-right space-y-0.5">
+                              <p>💧 {weather.humidity}%</p>
+                              <p>💨 {weather.windSpeed} km/h</p>
+                              <p>🌧️ {weather.precipitation}mm</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-1 pt-1 border-t border-gray-200">
+                            {weather.forecast.map((h,i)=>(
+                              <div key={i} className={`flex-1 text-center rounded px-0.5 py-1 ${i===0?"bg-blue-50 border border-blue-100":""}`}>
+                                <p className="text-[8px] text-gray-400 mb-0.5">{i===0?"Now":h.time}</p>
+                                <p className="text-sm leading-none">{getWeatherInfo(h.code).emoji}</p>
+                                <p className="text-[9px] font-medium text-gray-700 mt-0.5">{h.temp}°</p>
+                                {h.rainChance>0&&<p className="text-[8px] text-blue-400">{h.rainChance}%</p>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
                   {onPillarSelect && (
                     <Button
                       className="w-full mt-2 bg-blue-600 hover:bg-blue-700 h-9 text-xs"

@@ -2,49 +2,39 @@ import { useEffect, useRef, useState } from 'react';
 import { TrendingUp, Banknote, MapPin, AlertTriangle, HandCoins } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Coordinates lookup for known localities — extend as needed
-const LOCALITY_COORDINATES = {
-  'Majlis Perbandaran Selayang':              { lat: 3.1579, lng: 101.7123 },
-  'Bukit Bintang':                   { lat: 3.1466, lng: 101.7101 },
-  'Petaling Jaya':                   { lat: 3.1073, lng: 101.6067 },
-  'Subang Jaya':                     { lat: 3.0439, lng: 101.5800 },
-  'Chow Kit':                        { lat: 3.1620, lng: 101.6970 },
-  'Bangsar':                         { lat: 3.1302, lng: 101.6726 },
-  'Mont Kiara':                      { lat: 3.1726, lng: 101.6530 },
-  'Kepong':                          { lat: 3.2115, lng: 101.6368 },
-  'Wangsa Maju':                     { lat: 3.2077, lng: 101.7384 },
-  'Cheras':                          { lat: 3.0800, lng: 101.7500 },
-};
-
 const DEFAULT_COORDINATES = { lat: 3.1390, lng: 101.6869 };
+
+// Geocode a locality name using Nominatim (free, no API key)
+// Returns { lat, lng } or DEFAULT_COORDINATES on failure
+async function geocodeLocality(locality) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locality + ', Malaysia')}&format=json&limit=1`,
+      { headers: { 'Accept-Language': 'en' } }
+    );
+    const data = await res.json();
+    if (data.length > 0) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    }
+  } catch (_) {}
+  return DEFAULT_COORDINATES;
+}
 
 export function Analytics({ maintenanceItems, tasks = [] }) {
   const mapRef = useRef(null);
   const mapContainerRef = useRef(null);
-
-  // Mobile detection
   const [isMobile, setIsMobile] = useState(false);
 
-   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+  // Geocoded coordinates keyed by locality name
+  const [localityCoords, setLocalityCoords] = useState({});
+
+  useEffect(() => { window.scrollTo(0, 0); }, []);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -53,31 +43,26 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Geocode all unique localities from real task data — once on mount
+  useEffect(() => {
+    const localities = [...new Set(tasks.map(t => t.locality).filter(Boolean))];
+    if (localities.length === 0) return;
+
+    // Stagger requests 300ms apart to respect Nominatim's usage policy (1 req/sec)
+    localities.forEach((locality, i) => {
+      setTimeout(async () => {
+        const coords = await geocodeLocality(locality);
+        setLocalityCoords(prev => ({ ...prev, [locality]: coords }));
+      }, i * 300);
+    });
+  }, []); // only on mount — task localities don't change at runtime
+
   const rmFormatter = (value) => `RM ${Number(value).toLocaleString()}`;
 
   const costTooltipStyles = isMobile
-    ? {
-        contentStyle: {
-          fontSize: 12,
-          padding: '8px 10px',
-          borderRadius: 10,
-          borderColor: '#E5E7EB',
-        },
-        labelStyle: { fontSize: 11, marginBottom: 4, color: '#374151' },
-        itemStyle: { fontSize: 12, paddingTop: 2, paddingBottom: 2 },
-      }
-    : {
-        contentStyle: {
-          fontSize: 13,
-          padding: '10px 12px',
-          borderRadius: 10,
-          borderColor: '#E5E7EB',
-        },
-        labelStyle: { fontSize: 12, marginBottom: 4, color: '#374151' },
-        itemStyle: { fontSize: 13, paddingTop: 2, paddingBottom: 2 },
-      };
+    ? { contentStyle: { fontSize: 12, padding: '8px 10px', borderRadius: 10, borderColor: '#E5E7EB' }, labelStyle: { fontSize: 11, marginBottom: 4, color: '#374151' }, itemStyle: { fontSize: 12, paddingTop: 2, paddingBottom: 2 } }
+    : { contentStyle: { fontSize: 13, padding: '10px 12px', borderRadius: 10, borderColor: '#E5E7EB' }, labelStyle: { fontSize: 12, marginBottom: 4, color: '#374151' }, itemStyle: { fontSize: 13, paddingTop: 2, paddingBottom: 2 } };
 
-  // Cost forecasting data
   const costData = [
     { year: '2020', actual: 45000, predicted: 42000, preventive: 35000 },
     { year: '2021', actual: 45000, predicted: 42000, preventive: 35000 },
@@ -87,7 +72,6 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     { year: '2025', actual: 55000, predicted: 58000, preventive: 42000 },
   ];
 
-  // Severity distribution
   const severityData = [
     { name: 'Critical', value: maintenanceItems.filter(i => i.severity === 'Critical').length, color: '#EF4444' },
     { name: 'High',     value: maintenanceItems.filter(i => i.severity === 'High').length,     color: '#F97316' },
@@ -95,7 +79,7 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     { name: 'Low',      value: maintenanceItems.filter(i => i.severity === 'Low').length,      color: '#3B82F6' },
   ];
 
-  // Derive hotspot areas from real task data grouped by locality
+  // Hotspot areas — use geocoded coords, fall back to default while loading
   const hotspotAreas = Object.entries(
     tasks.reduce((acc, task) => {
       const loc = task.locality || 'Unknown';
@@ -110,7 +94,7 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
       const averageCost = costs.length > 0 ? Math.round(costs.reduce((a, b) => a + b, 0) / costs.length) : 0;
       return {
         locality,
-        coordinates: LOCALITY_COORDINATES[locality] || DEFAULT_COORDINATES,
+        coordinates: localityCoords[locality] || DEFAULT_COORDINATES,
         issueCount: localTasks.length,
         criticalCount,
         averageCost,
@@ -118,7 +102,6 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     })
     .sort((a, b) => b.issueCount - a.issueCount);
 
-  // Fault type distribution
   const faultTypeData = maintenanceItems.reduce((acc, item) => {
     item.faults.forEach(fault => {
       const existing = acc.find(a => a.name === fault);
@@ -128,33 +111,23 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     return acc;
   }, []);
 
-  // Initialize hotspot map
+  // Init map
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
-
     const map = L.map(mapContainerRef.current).setView([3.1390, 101.6869], 11);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors', maxZoom: 19,
     }).addTo(map);
     mapRef.current = map;
-
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
+    return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
   }, []);
 
-  // Add hotspot markers — re-runs when hotspotAreas changes
+  // Re-draw circles whenever hotspotAreas or localityCoords updates
   useEffect(() => {
     if (!mapRef.current) return;
-
     mapRef.current.eachLayer((layer) => {
       if (layer instanceof L.Circle) mapRef.current?.removeLayer(layer);
     });
-
     hotspotAreas.forEach((area) => {
       const circle = L.circle([area.coordinates.lat, area.coordinates.lng], {
         color:       area.criticalCount > 8 ? '#EF4444' : area.criticalCount > 5 ? '#F97316' : '#EAB308',
@@ -162,17 +135,16 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
         fillOpacity: 0.3,
         radius:      area.issueCount * 100,
       }).addTo(mapRef.current);
-
       circle.bindPopup(`
-        <div style="min-width: 200px;">
-          <h3 style="font-weight: bold; margin-bottom: 8px;">${area.locality}</h3>
-          <p style="font-size: 12px; margin: 4px 0;">Total Issues: ${area.issueCount}</p>
-          <p style="font-size: 12px; margin: 4px 0;">Critical: ${area.criticalCount}</p>
-          <p style="font-size: 12px; margin: 4px 0;">Avg Cost: RM ${area.averageCost.toLocaleString()}</p>
+        <div style="min-width:200px;">
+          <h3 style="font-weight:bold;margin-bottom:8px;">${area.locality}</h3>
+          <p style="font-size:12px;margin:4px 0;">Total Issues: ${area.issueCount}</p>
+          <p style="font-size:12px;margin:4px 0;">Critical: ${area.criticalCount}</p>
+          <p style="font-size:12px;margin:4px 0;">Avg Cost: RM ${area.averageCost.toLocaleString()}</p>
         </div>
       `);
     });
-  }, [hotspotAreas]);
+  }, [hotspotAreas, localityCoords]);
 
   const totalCost = maintenanceItems.reduce((sum, item) => sum + item.estimatedCost, 0);
   const avgCost = maintenanceItems.length > 0 ? totalCost / maintenanceItems.length : 0;
@@ -185,7 +157,6 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
         <p className="text-gray-500 mt-1">Cost optimization forecasting and hotspot analysis</p>
       </div>
 
-      {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -197,7 +168,6 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
             <p className="text-xs text-gray-500 mt-1">Year to date</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Average Cost per Pillar</CardTitle>
@@ -208,7 +178,6 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
             <p className="text-xs text-gray-500 mt-1">Per maintenance item</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Potential Savings</CardTitle>
@@ -219,7 +188,6 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
             <p className="text-xs text-gray-500 mt-1">With preventive maintenance</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Hotspot Areas</CardTitle>
@@ -232,42 +200,19 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
         </Card>
       </div>
 
-      {/* Cost Forecast Chart */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-gray-600">Cost Optimization Forecast</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* Mobile: scrollable wrapper so chart isn't clipped */}
           <div className={isMobile ? "w-full overflow-x-auto" : ""}>
-            <ResponsiveContainer
-              width="100%"
-              height={isMobile ? 320 : 400}
-              minWidth={isMobile ? 320 : undefined}
-            >
-              <LineChart
-                data={costData}
-                margin={isMobile ? { top: 8, right: 8, left: 0, bottom: 4 } : undefined}
-              >
+            <ResponsiveContainer width="100%" height={isMobile ? 320 : 400} minWidth={isMobile ? 320 : undefined}>
+              <LineChart data={costData} margin={isMobile ? { top: 8, right: 8, left: 0, bottom: 4 } : undefined}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" tick={{ fontSize: isMobile ? 11 : 12 }} />
                 <YAxis tick={{ fontSize: isMobile ? 11 : 12 }} width={isMobile ? 48 : undefined} />
-                <Tooltip
-                  formatter={rmFormatter}
-                  contentStyle={costTooltipStyles.contentStyle}
-                  labelStyle={costTooltipStyles.labelStyle}
-                  itemStyle={costTooltipStyles.itemStyle}
-                />
-                <Legend
-                  align="center"
-                  verticalAlign="bottom"
-                  height={isMobile ? 52 : 36}
-                  iconSize={isMobile ? 10 : 14}
-                  wrapperStyle={{
-                    fontSize: isMobile ? 12 : 13,
-                    lineHeight: isMobile ? '16px' : '18px',
-                  }}
-                />
+                <Tooltip formatter={rmFormatter} contentStyle={costTooltipStyles.contentStyle} labelStyle={costTooltipStyles.labelStyle} itemStyle={costTooltipStyles.itemStyle} />
+                <Legend align="center" verticalAlign="bottom" height={isMobile ? 52 : 36} iconSize={isMobile ? 10 : 14} wrapperStyle={{ fontSize: isMobile ? 12 : 13, lineHeight: isMobile ? '16px' : '18px' }} />
                 <Line type="monotone" dataKey="actual"     stroke="#3B82F6" strokeWidth={2} name="Actual Cost" />
                 <Line type="monotone" dataKey="predicted"  stroke="#F97316" strokeWidth={2} strokeDasharray="5 5" name="Predicted Cost" />
                 <Line type="monotone" dataKey="preventive" stroke="#10B981" strokeWidth={2} name="With Preventive Maintenance" />
@@ -283,61 +228,29 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
         </CardContent>
       </Card>
 
-      {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <CardHeader>
-            <CardTitle>Pillar Count by Severity Level</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Pillar Count by Severity Level</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
-                <Pie
-                  data={severityData}
-                  cx="50%"
-                  cy="50%"
-                  label={({ name, value }) => (value > 0 ? `${name}: ${value}` : null)}
-                  labelLine={false}
-                  outerRadius={100}
-                  dataKey="value"
-                >
-                  {severityData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
+                <Pie data={severityData} cx="50%" cy="50%" label={({ name, value }) => (value > 0 ? `${name}: ${value}` : null)} labelLine={false} outerRadius={100} dataKey="value">
+                  {severityData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
                 </Pie>
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Pillar Fault Type Frequency</CardTitle>
-          </CardHeader>
+          <CardHeader className="pb-2"><CardTitle>Pillar Fault Type Frequency</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={isMobile ? 240 : 300}>
-              <BarChart
-                data={faultTypeData}
-                margin={isMobile ? { top: 8, right: 8, left: 0, bottom: 0 } : undefined}
-              >
+              <BarChart data={faultTypeData} margin={isMobile ? { top: 8, right: 8, left: 0, bottom: 0 } : undefined}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="name"
-                  angle={isMobile ? -20 : -45}
-                  textAnchor="end"
-                  height={isMobile ? 60 : 100}
-                  tick={{ fontSize: isMobile ? 10 : 12 }}
-                  tickFormatter={(value) =>
-                    isMobile && typeof value === 'string' && value.length > 14 ? `${value.slice(0, 14)}...` : value
-                  }
-                />
+                <XAxis dataKey="name" angle={isMobile ? -20 : -45} textAnchor="end" height={isMobile ? 60 : 100} tick={{ fontSize: isMobile ? 10 : 12 }} tickFormatter={(v) => isMobile && typeof v === 'string' && v.length > 14 ? `${v.slice(0,14)}...` : v} />
                 <YAxis tick={{ fontSize: isMobile ? 11 : 12 }} width={isMobile ? 42 : undefined} />
-                <Tooltip
-                  contentStyle={isMobile ? { fontSize: 12, padding: '8px 10px', borderRadius: 10 } : undefined}
-                  labelStyle={isMobile ? { fontSize: 11, marginBottom: 4, color: '#374151' } : undefined}
-                  itemStyle={isMobile ? { fontSize: 12, paddingTop: 2, paddingBottom: 2 } : undefined}
-                />
+                <Tooltip contentStyle={isMobile ? { fontSize: 12, padding: '8px 10px', borderRadius: 10 } : undefined} labelStyle={isMobile ? { fontSize: 11, marginBottom: 4, color: '#374151' } : undefined} itemStyle={isMobile ? { fontSize: 12, paddingTop: 2, paddingBottom: 2 } : undefined} />
                 <Bar dataKey="value" fill="#3B82F6" name="Occurrences" />
               </BarChart>
             </ResponsiveContainer>
@@ -345,11 +258,8 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
         </Card>
       </div>
 
-      {/* Hotspot Map */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle>Pillar Hotspot Areas</CardTitle>
-        </CardHeader>
+        <CardHeader className="pb-2"><CardTitle>Pillar Hotspot Areas</CardTitle></CardHeader>
         <CardContent>
           <div ref={mapContainerRef} className="w-full h-[500px] relative z-0 rounded-lg mb-4" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -360,10 +270,7 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
                     <h4 className="font-semibold">{area.locality}</h4>
                     <p className="text-sm text-gray-600 mt-1">{area.issueCount} total pillars</p>
                   </div>
-                  <AlertTriangle className={`h-5 w-5 ${
-                    area.criticalCount > 8 ? 'text-red-600' :
-                    area.criticalCount > 5 ? 'text-orange-600' : 'text-yellow-600'
-                  }`} />
+                  <AlertTriangle className={`h-5 w-5 ${area.criticalCount > 8 ? 'text-red-600' : area.criticalCount > 5 ? 'text-orange-600' : 'text-yellow-600'}`} />
                 </div>
                 <div className="mt-3 space-y-1 text-xs text-gray-600">
                   <p>Critical: {area.criticalCount}</p>
