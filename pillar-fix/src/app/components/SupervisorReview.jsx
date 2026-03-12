@@ -4,16 +4,10 @@ import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Textarea } from '@/app/components/ui/textarea';
 import { Label } from '@/app/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/app/components/ui/select';
 import { Badge } from '@/app/components/ui/badge';
 import { toast } from 'sonner';
 import api from "@/app/api";
+import { getApiErrorMessage } from '@/app/apiError';
 
 export function SupervisorReview({ submission, currentUser, onBack, onApprove, onReject }) {
   const isApproved = submission.validationStatus === 'Approved';
@@ -24,13 +18,22 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
     window.scrollTo(0, 0);
   }, []);
 
-  const [severity, setSeverity] = useState(submission.approvalData?.severity || 'Medium');
-  const [priority, setPriority] = useState(submission.approvalData?.priority || 'Medium');
+  const aiOverallRisk = submission.overallRisk || submission.approvalData?.severity || 'Medium';
   const [estimatedCost, setEstimatedCost] = useState(
     submission.approvalData?.estimatedCost?.toString() || '5000'
   );
-  const [notes, setNotes] = useState(submission.approvalData?.notes || '');
+  const [notes, setNotes] = useState(submission.approvalData?.remarks || '');
   const [rejectReason, setRejectReason] = useState(submission.rejectionReason || '');
+
+  const getRiskBadge = (risk) => {
+    const colors = {
+      Critical: 'bg-red-100 text-red-700',
+      High: 'bg-orange-100 text-orange-700',
+      Medium: 'bg-yellow-100 text-yellow-700',
+      Low: 'bg-blue-100 text-blue-700',
+    };
+    return <Badge className={colors[risk] || 'bg-gray-100 text-gray-700'}>{risk}</Badge>;
+  };
 
   const allFaults = submission.detectionResults?.flatMap(r =>
     r.boundingBoxes.map(b => b.faultType)
@@ -52,8 +55,7 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
     try {
       const response = await api.put(`/tasks/${submission.taskId}/validate`, {
         validation_status: "Approved",
-        severity_validation: severity,
-        priority_validation: priority,
+        severity_validation: aiOverallRisk,
         cost_estimation: cost,
         remarks: notes,
         validation_by: currentUser.employeeId,
@@ -61,11 +63,11 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
 
       console.log("Approve response:", response); // <-- add this
 
-      onApprove(submission.id, { severity, priority, cost, notes });
+      onApprove(submission.id, { severity: aiOverallRisk, cost, notes });
       toast.success("Maintenance approved");
     } catch (err) {
       console.error("Approve error:", err); // <-- and this
-      toast.error(err.response?.data?.detail || "Validation failed");
+      toast.error(getApiErrorMessage(err, "Validation failed"));
     }
   };
 
@@ -74,8 +76,7 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
     try {
       await api.put(`/tasks/${submission.taskId}/validate`, {
         validation_status: "Rejected",
-        severity_validation: severity,
-        priority_validation: priority,
+        severity_validation: aiOverallRisk,
         cost_estimation: 0,
         remarks: rejectReason,
         validation_by: currentUser.employeeId,
@@ -83,7 +84,7 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
       onReject(submission.id, rejectReason);
       toast.success("Submission rejected");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Rejection failed");
+      toast.error(getApiErrorMessage(err, "Rejection failed"));
     }
   };
 
@@ -225,34 +226,13 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
               {/* Increased spacing between rows and added top padding */}
               <CardContent className="space-y-6 pt-4">
                 <div>
-                  {/* Added block and mb-2 to the label */}
-                  <Label htmlFor="severity" className="block mb-2">Severity Level</Label>
-                  <Select value={severity} onValueChange={setSeverity} disabled={isValidated}>
-                    <SelectTrigger id="severity" className={isValidated ? 'opacity-60 cursor-not-allowed' : ''}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Low">Low</SelectItem>
-                      <SelectItem value="Medium">Medium</SelectItem>
-                      <SelectItem value="High">High</SelectItem>
-                      <SelectItem value="Critical">Critical</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="priority" className="block mb-2">Priority</Label>
-                  <Select value={priority} onValueChange={setPriority} disabled={isValidated}>
-                    <SelectTrigger id="priority" className={isValidated ? 'opacity-60 cursor-not-allowed' : ''}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Low">Low</SelectItem>
-                      <SelectItem value="Medium">Medium</SelectItem>
-                      <SelectItem value="High">High</SelectItem>
-                      <SelectItem value="Urgent">Urgent</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label className="block mb-2">Severity Level (AI Detection)</Label>
+                  <input
+                    type="text"
+                    value={aiOverallRisk}
+                    disabled
+                    className={`flex h-10 w-full rounded-md border border-input bg-input-background px-3 py-2 text-sm ${isValidated ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  />
                 </div>
 
                 <div>
