@@ -5,3 +5,8 @@ pydantic
 psycopg2 #window
 python-dotenv
 psycopg2-binary==2.9.9
+google-cloud-storage
+google-cloud-sql-connector[pg8000]
+google-auth
+cloud-sql-python-connector
+pg8000
