@@ -414,6 +414,33 @@ async def delete_user(user_id: int, db: db_dependency):
 # Tasks
 # ---------------------------------------------------------------------------
 
+@app.get("/pillars")
+async def get_pillars(db: db_dependency):
+    """
+    Returns all pillars, excluding those that already have an active (non-Completed) task.
+    Used by TechnicianDashboard create task dropdown.
+    """
+    # Get pillar IDs already assigned to an active task
+    active_pillar_ids = {
+        row[0]
+        for row in db.query(Task.pillar_id)
+        .filter(Task.task_status.notin_(["Completed"]))
+        .all()
+    }
+ 
+    pillars = db.query(Pillar).all()
+ 
+    return [
+        {
+            "pillarId": p.pillarId,
+            "address": p.address,
+            "locality": p.locality,
+        }
+        for p in pillars
+        if p.pillarId not in active_pillar_ids
+    ]
+
+
 @app.get("/tasks")
 async def get_tasks(db: db_dependency):
     """
