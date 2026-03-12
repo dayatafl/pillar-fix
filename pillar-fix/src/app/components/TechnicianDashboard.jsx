@@ -8,9 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/app/components/ui/label';
 import { Input } from '@/app/components/ui/input';
 import { Calendar } from '@/app/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/app/components/ui/popover';
 import { toast } from 'sonner';
 import { format, isSameDay } from 'date-fns';
 import api from "@/app/api";
+import { getApiErrorMessage } from '@/app/apiError';
 
 export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAIResult, currentUser, technicians, onUpdateTasks, onAssignTask }) {
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
@@ -19,10 +21,16 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
   const [selectedDate, setSelectedDate] = useState(undefined);
   const [isCalendarFilterOpen, setIsCalendarFilterOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDueDateOpen, setIsDueDateOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
+  const toDueDateIso = (date) => {
+    const d = new Date(date);
+    d.setHours(12, 0, 0, 0);
+    return d.toISOString();
+  };
   const [newTask, setNewTask] = useState({
     pillarId: '',
-    dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
+    dueDate: toDueDateIso(new Date(Date.now() + 86400000 * 5)),
   });
 
   useEffect(() => {
@@ -46,12 +54,13 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
 
       toast.success(`Task for ${newTask.pillarId} created successfully`);
       setIsCreateDialogOpen(false);
+      setIsDueDateOpen(false);
       setNewTask({
         pillarId: '',
-        dueDate: new Date(Date.now() + 86400000 * 5).toISOString(),
+        dueDate: toDueDateIso(new Date(Date.now() + 86400000 * 5)),
       });
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to create task');
+      toast.error(getApiErrorMessage(err, 'Failed to create task'));
     }
   };
 
@@ -114,7 +123,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
       setIsAssignDialogOpen(false);
       setSelectedTechnicianId("");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Reassign failed");
+      toast.error(getApiErrorMessage(err, "Reassign failed"));
     }
   };
 
@@ -165,10 +174,10 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
       {/* Filters Row */}
       <div className="flex w-full justify-between items-center">
         <div className="flex items-center gap-4">
-          <div className="relative">
+          <div className="relative w-[13.75rem] md:w-60">
             <button
               onClick={() => setIsCalendarFilterOpen(!isCalendarFilterOpen)}
-              className="w-[13.75rem] md:w-60 bg-white border rounded-md px-3 py-2 text-sm shadow-sm cursor-pointer font-semibold flex items-center justify-between"
+              className="w-full bg-white border rounded-md px-3 py-2 text-sm shadow-sm cursor-pointer font-semibold flex items-center justify-between"
             >
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 shrink-0" />
@@ -181,10 +190,11 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
             </button>
 
             {isCalendarFilterOpen && (
-              <div className="absolute z-50 bg-white shadow-xl border rounded-lg p-2 mt-1">
+              <div className="absolute z-50 mt-1 w-full rounded-lg border bg-white shadow-xl">
                 <Calendar
                   mode="single"
                   selected={selectedDate}
+                  className="w-full"
                   onSelect={(date) => {
                     setSelectedDate(date);
                     setIsCalendarFilterOpen(false);
@@ -377,12 +387,32 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
             </div>
             <div className="grid gap-2">
               <Label htmlFor="dueDate">Due Date</Label>
-              <Input
-                id="dueDate"
-                type="datetime-local"
-                value={newTask.dueDate.slice(0, 16)}
-                onChange={(e) => setNewTask({ ...newTask, dueDate: new Date(e.target.value).toISOString() })}
-              />
+              <Popover open={isDueDateOpen} onOpenChange={setIsDueDateOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    id="dueDate"
+                    type="button"
+                    className="border-input flex h-9 w-full min-w-0 items-center justify-between rounded-md border bg-input-background px-3 py-1 text-base transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm"
+                  >
+                    <span className={newTask.dueDate ? '' : 'text-muted-foreground'}>
+                      {newTask.dueDate ? format(new Date(newTask.dueDate), 'dd MMM yyyy') : 'Select due date'}
+                    </span>
+                    <CalendarDays className="h-4 w-4 opacity-60" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-2">
+                  <Calendar
+                    mode="single"
+                    selected={newTask.dueDate ? new Date(newTask.dueDate) : undefined}
+                    className="w-full"
+                    onSelect={(date) => {
+                      if (!date) return;
+                      setNewTask({ ...newTask, dueDate: toDueDateIso(date) });
+                      setIsDueDateOpen(false);
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
           <DialogFooter>

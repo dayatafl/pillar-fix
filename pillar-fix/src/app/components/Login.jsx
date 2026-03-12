@@ -5,7 +5,7 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Button } from '@/app/components/ui/button';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import logo from './logo/FINAL.svg'
+import logo from './logo/FINAL.svg';
 import api from "@/app/api";
 
 export function Login({ onLogin }) {
@@ -95,16 +95,6 @@ export function Login({ onLogin }) {
               <LogIn className="mr-2 h-4 w-4" />
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
-
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-xs font-semibold text-blue-900 mb-2">Demo Credentials:</p>
-              <div className="space-y-1 text-xs text-blue-700">
-                <p><strong>Admin:</strong> admin@tnb.com / admin123</p>
-                <p><strong>Manager:</strong> manager@tnb.com / manager123</p>
-                <p><strong>Supervisor:</strong> supervisor@tnb.com / super123</p>
-                <p><strong>Technician:</strong> tech@tnb.com / tech123</p>
-              </div>
-            </div>
           </form>
         </CardContent>
       </Card>

@@ -8,6 +8,7 @@ import { Textarea } from '@/app/components/ui/textarea';
 import { Label } from '@/app/components/ui/label';
 import { Input } from '@/app/components/ui/input';
 import { toast } from 'sonner';
+import { getApiErrorMessage } from '@/app/apiError';
 
 const SIDES = [
   { side: 'front', label: 'Front' },
@@ -274,7 +275,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
       setCompletionImages([]);
       toast.success("Completion submitted");
     } catch (err) {
-      toast.error(err.response?.data?.detail || "Completion failed");
+      toast.error(getApiErrorMessage(err, "Completion failed"));
     }
   };
 
@@ -643,20 +644,6 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                   )}
                 </div>
               )}
-
-              <div>
-                <Label className="text-gray-600">Priority</Label>
-                <div className="mt-1">
-                  <Badge className={
-                    item.priority === 'Urgent' ? 'bg-red-100 text-red-700' :
-                    item.priority === 'High'   ? 'bg-orange-100 text-orange-700' :
-                    item.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-blue-100 text-blue-700'
-                  }>
-                    {item.priority}
-                  </Badge>
-                </div>
-              </div>
 
               <div>
                 <Label className="text-gray-600">Severity</Label>

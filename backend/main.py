@@ -162,7 +162,6 @@ class TaskSubmit(BaseModel):
 class TaskValidation(BaseModel):
     validation_status: str
     severity_validation: str
-    priority_validation: str
     cost_estimation: float
     remarks: str
     validation_by: str        # employeeId of the supervisor who validated
@@ -829,7 +828,6 @@ async def validate_task(task_id: int, data: TaskValidation, db: db_dependency):
 
     task.validation_status = data.validation_status
     task.severity_validation = data.severity_validation
-    task.priority_validation = data.priority_validation
     task.cost_estimation = data.cost_estimation
     task.remarks = data.remarks
     task.validation_by = data.validation_by
@@ -871,7 +869,6 @@ async def get_submissions(db: db_dependency):
             Task.updated_date,
             Task.validation_status,
             Task.severity_validation,
-            Task.priority_validation,
             Task.cost_estimation,
             Task.remarks,
             Task.validation_by,
@@ -926,7 +923,6 @@ async def get_submissions(db: db_dependency):
         if r.validation_status == "Approved":
             approval_data = {
                 "severity": r.severity_validation,
-                "priority": r.priority_validation,
                 "costEstimation": r.cost_estimation,
                 "remarks": r.remarks,
                 "validatedBy": r.validation_by,
@@ -1035,7 +1031,6 @@ async def get_maintenance(db: db_dependency):
             Task.task_status,
             Task.maintenance_status,
             Task.severity_validation,
-            Task.priority_validation,
             Task.cost_estimation,
             Task.remarks,
             Task.work_log,
@@ -1088,7 +1083,6 @@ async def get_maintenance(db: db_dependency):
             "address": r.address,
             "coordinates": r.user_current_location or r.coordinates,
             "severity": r.severity_validation,
-            "priority": r.priority_validation,
             "estimatedCost": r.cost_estimation or 0,
             "notes": r.remarks,
             "faults": faults,

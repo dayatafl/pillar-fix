@@ -7,6 +7,7 @@ import { Label } from '@/app/components/ui/label';
 import { Badge } from '@/app/components/ui/badge';
 import { toast } from 'sonner';
 import api from "@/app/api";
+import { getApiErrorMessage } from '@/app/apiError';
 
 const SIDES = [
   { side: 'front', label: 'Front' },
@@ -166,7 +167,7 @@ export function AuditForm({ task, onBack, onSubmit }) {
       });
       toast.success('Audit submitted — AI detection complete');
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Submission failed');
+      toast.error(getApiErrorMessage(err, 'Submission failed'));
     }
   };
 
@@ -331,6 +332,7 @@ export function AuditForm({ task, onBack, onSubmit }) {
               <div><Label className="text-gray-600 block mb-1.5">Pillar ID</Label><Input value={task.pillarId} readOnly className="bg-gray-50" /></div>
               <div><Label className="text-gray-600 block mb-1.5">Address</Label><Input value={task.address} readOnly className="bg-gray-50" /></div>
               <div><Label className="text-gray-600 block mb-1.5">Locality</Label><Input value={task.locality} readOnly className="bg-gray-50" /></div>
+              <div><Label className="text-gray-600 block mb-1.5">Due Date</Label><Input value={task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'} readOnly className="bg-gray-50" /></div>
             </CardContent>
           </Card>
 
