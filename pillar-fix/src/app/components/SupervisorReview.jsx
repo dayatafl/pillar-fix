@@ -317,14 +317,23 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
                 <p className="font-medium">{submission.address}</p>
               </div>
               <div>
-                <span className="text-gray-600">Submitted By:</span>
-                <p className="font-medium">{submission.submittedBy}</p>
+                <span className="text-gray-600">Due Date:</span>
+                <div
+                  className={`mt-1 flex items-center justify-between rounded-lg border px-3 py-2 ${
+                    submission.dueDate ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <span className={`text-sm font-semibold ${submission.dueDate ? 'text-red-900' : 'text-gray-700'}`}>
+                    {submission.dueDate ? new Date(submission.dueDate).toLocaleDateString() : 'N/A'}
+                  </span>
+                  {submission.dueDate && (
+                    <Badge className="bg-red-600 text-white hover:bg-red-600">Due</Badge>
+                  )}
+                </div>
               </div>
               <div>
-                <span className="text-gray-600">Submitted:</span>
-                <p className="font-medium">
-                  {new Date(submission.submittedAt).toLocaleString()}
-                </p>
+                <span className="text-gray-600">Submitted By:</span>
+                <p className="font-medium">{submission.submittedBy}</p>
               </div>
             </CardContent>
           </Card>

@@ -664,14 +664,21 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                 <p className="font-medium text-lg">RM{(item.estimatedCost ?? 0).toLocaleString()}</p>
               </div>
 
+              <div>
+                <Label className="text-gray-600">Supervisor Notes</Label>
+                <div className="mt-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 whitespace-pre-wrap">
+                  {item.notes?.trim() ? item.notes : 'N/A'}
+                </div>
+              </div>
+
               {item.scheduledDate && (
                 <div>
-                  <Label className="text-gray-600">Scheduled Date</Label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Calendar className="h-4 w-4 text-gray-600" />
-                    <span className="font-medium">
+                  <Label className="text-gray-600">Due Date</Label>
+                  <div className="mt-1 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                    <span className="text-sm font-semibold text-red-900">
                       {new Date(item.scheduledDate).toLocaleDateString()}
                     </span>
+                    <Badge className="bg-red-600 text-white hover:bg-red-600">Due</Badge>
                   </div>
                 </div>
               )}

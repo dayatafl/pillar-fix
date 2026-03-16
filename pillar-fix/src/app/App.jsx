@@ -57,9 +57,22 @@ export default function App() {
 
   const fetchData = () => {
     if (!isAuthenticated) return;
-    api.get("/tasks").then(({ data }) => setAuditTasks(data)).catch(console.error);
-    api.get("/submissions").then(({ data }) => setSubmissions(data)).catch(console.error);
-    api.get("/maintenance").then(({ data }) => setMaintenanceItems(data)).catch(console.error);
+    // Fetch tasks and submissions together so we can enrich submissions with dueDate
+    Promise.all([
+      api.get("/tasks"),
+      api.get("/submissions"),
+      api.get("/maintenance"),
+    ]).then(([tasksRes, submissionsRes, maintenanceRes]) => {
+      const tasks = tasksRes.data;
+      setAuditTasks(tasks);
+      // Enrich each submission with dueDate from its matching task
+      const enrichedSubmissions = submissionsRes.data.map(sub => ({
+        ...sub,
+        dueDate: sub.dueDate ?? tasks.find(t => t.id === sub.taskId)?.dueDate,
+      }));
+      setSubmissions(enrichedSubmissions);
+      setMaintenanceItems(maintenanceRes.data);
+    }).catch(console.error);
   };
 
   // Initial load on login
@@ -156,6 +169,13 @@ export default function App() {
     setCurrentView('maintenance-list');
   };
 
+  const getActiveMenuView = (view) => {
+    if (view === 'audit-form' || view === 'detection-results') return 'tech-dashboard';
+    if (view === 'supervisor-review') return 'supervisor-validation';
+    if (view === 'maintenance-detail') return 'maintenance-list';
+    return view;
+  };
+
   // Menu Helper
   const getMenuItems = () => {
     const baseItems = [
@@ -183,6 +203,7 @@ export default function App() {
   if (!isAuthenticated) return <><Login onLogin={(u) => handleLogin(u, false)} /><Toaster /></>;
 
   const menuItems = getMenuItems();
+  const activeMenuView = getActiveMenuView(currentView);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -201,7 +222,7 @@ export default function App() {
               {menuItems.map((item) => (
                 <Button
                   key={item.id}
-                  variant={currentView === item.view ? 'default' : 'ghost'}
+                  variant={activeMenuView === item.view ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setCurrentView(item.view)}
                 >
@@ -264,7 +285,7 @@ export default function App() {
                 key={item.id}
                 onClick={() => { setCurrentView(item.view); setMobileMenuOpen(false); }}
                 className={"w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors " +
-                  (currentView === item.view ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-100")}
+                  (activeMenuView === item.view ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-100")}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
