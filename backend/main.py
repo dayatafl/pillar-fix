@@ -2,17 +2,21 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Annotated, Optional
 from sqlalchemy.orm import Session, aliased
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 import models
 from models import User, Pillar, Task, Photo, Detection
 from database import engine, SessionLocal, upload_image_to_gcs, get_signed_url, sign_image_list
 from datetime import datetime
 import uuid
 import math
+import os
+import json
+
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
 
 
 app = FastAPI()
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,6 +47,7 @@ db_dependency = Annotated[Session, Depends(get_db)]
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
 
 class UserCreate(BaseModel):
     name: str
@@ -78,7 +83,6 @@ class TaskSubmit(BaseModel):
     image2: str
     image3: str
     image4: str
-    # Frontend sends { lat: float, lng: float }
     user_current_location: dict
 
 
@@ -95,46 +99,219 @@ class TaskMaintenance(BaseModel):
     action: str
     notes: str
     images: Optional[list] = []
-    logged_by: str 
+    logged_by: str
     completion_evidence: Optional[str] = ""
     maintenance_validate_by: Optional[str] = None
 
+
 # ---------------------------------------------------------------------------
-# AI detection stub
-# Replace this function body with your real YOLO / model inference call.
-# The signature accepts image URLs so you can pass them to the model.
+# Analytics output schemas (LangChain structured output)
+# ---------------------------------------------------------------------------
+
+class MonthProjection(BaseModel):
+    month: str        = Field(description="3-letter month abbreviation e.g. 'Apr'")
+    projected: float  = Field(description="Projected reactive maintenance cost in RM")
+    preventive: float = Field(description="Estimated cost with preventive maintenance adopted (RM)")
+
+
+class SeverityInsight(BaseModel):
+    level: str        = Field(description="Severity level: Critical | High | Medium | Low")
+    count: int        = Field(description="Number of pillars at this severity level")
+    percentage: float = Field(description="Percentage share of total pillars (0-100)")
+    analysis: str     = Field(description="1-2 sentence analysis of this severity tier and its implications")
+    urgency: str      = Field(description="Recommended response timeframe e.g. Within 24 hours")
+
+
+class FaultTypeInsight(BaseModel):
+    fault_type: str        = Field(description="Fault name e.g. Crack, Rust, Spalling")
+    occurrences: int       = Field(description="Total AI detections of this fault type")
+    avg_confidence: float  = Field(description="Mean AI detection confidence 0.0-1.0")
+    risk_contribution: str = Field(description="Low | Medium | High")
+    recommendation: str    = Field(description="Specific actionable maintenance recommendation")
+
+
+class AnalyticsInsightsReport(BaseModel):
+    insight: str               = Field(description="2-3 sentence executive summary of maintenance health and cost trends")
+    risk_level: str            = Field(description="Overall portfolio risk: Low | Medium | High | Critical")
+    potential_savings: float   = Field(description="Total RM savings achievable over 6 months by adopting preventive maintenance")
+    cost_projection: list[MonthProjection]      = Field(description="Exactly 6 monthly cost projections starting from the next calendar month")
+    severity_insights: list[SeverityInsight]    = Field(description="One entry per severity level that has at least 1 pillar")
+    severity_summary: str                       = Field(description="1-2 sentence overall severity portfolio assessment")
+    fault_type_insights: list[FaultTypeInsight] = Field(description="One entry per fault type sorted by occurrences descending")
+    fault_summary: str         = Field(description="1-2 sentence summary of dominant fault patterns")
+    recommendations: list[str] = Field(description="Exactly 3 specific actionable recommendations")
+
+
+# ---------------------------------------------------------------------------
+# Analytics LangChain chain
+# ---------------------------------------------------------------------------
+
+_SYSTEM_INSTRUCTION = """You are a senior infrastructure analytics specialist for a Malaysian utility
+company managing roadside utility pillars (concrete/metal posts).
+
+You MUST populate ALL 9 fields of the AnalyticsInsightsReport — never omit any field.
+If data is sparse, use reasonable estimates and note it in the analysis text.
+
+COST PROJECTION (cost_projection) — required, exactly 6 entries
+- Start from next_projection_month, produce 6 consecutive months.
+- Base projected on avg_cost_per_task_rm x estimated monthly volume.
+  Use monthly_costs_this_year as baseline if available; otherwise estimate
+  monthly volume as max(1, total_approved_tasks / months_elapsed_this_year).
+- preventive = projected x 0.65 (35% saving from preventive maintenance).
+- If total_approved_tasks is 0, use RM 5000/month as a conservative placeholder.
+
+SEVERITY INSIGHTS (severity_insights) — required, one entry per level in severity_distribution
+- If severity_distribution is empty, produce one entry:
+  level=Unknown, count=0, percentage=0.0,
+  analysis=No severity data recorded yet, urgency=Assess on next inspection.
+- percentage = (count / total_approved_tasks) x 100, rounded to 1 decimal.
+- Urgency: Critical=Within 24-48 hours, High=Within 1 week,
+           Medium=Within 1 month, Low=Scheduled next quarter.
+
+FAULT TYPE INSIGHTS (fault_type_insights) — required, one entry per fault in fault_type_frequency
+- If fault_type_frequency is empty, produce one placeholder entry.
+- Sort by occurrences descending.
+- risk_contribution: High = avg_confidence > 0.85 AND occurrences >= 3;
+                     Medium = occurrences >= 2; Low = otherwise.
+- recommendation must name a specific maintenance action.
+
+RECOMMENDATIONS (recommendations) — required, exactly 3 strings.
+severity_summary and fault_summary — required, always non-empty strings.
+All RM figures must be realistic for Malaysian infrastructure context."""
+
+
+def _build_analytics_chain():
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        google_api_key=os.environ.get("GEMINI_API_KEY"),
+        temperature=0,
+    )
+
+    structured_llm = llm.with_structured_output(AnalyticsInsightsReport)
+
+    # System message goes in the prompt template (not the constructor)
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            _SYSTEM_INSTRUCTION,
+        ),
+        (
+            "human",
+            "Aggregated maintenance statistics:\n\n{stats}\n\nGenerate the complete analytics report. All 9 fields are required.",
+        ),
+    ])
+
+    return prompt | structured_llm
+
+
+# Built once at module load — reused on every request
+_analytics_chain = _build_analytics_chain()
+
+
+# ---------------------------------------------------------------------------
+# Analytics stats aggregation
+# ---------------------------------------------------------------------------
+
+def _aggregate_stats(db: Session) -> dict:
+    approved_tasks = (
+        db.query(Task)
+        .filter(Task.validation_status == "Approved")
+        .all()
+    )
+
+    total_cost      = sum(t.cost_estimation or 0 for t in approved_tasks)
+    avg_cost        = total_cost / len(approved_tasks) if approved_tasks else 0
+    completed_count = sum(1 for t in approved_tasks if t.task_status == "Completed")
+    in_progress     = sum(1 for t in approved_tasks if t.maintenance_status == "In Progress")
+    pending         = sum(1 for t in approved_tasks if (t.maintenance_status or "Pending") == "Pending")
+
+    severity_counts: dict[str, int] = {}
+    for t in approved_tasks:
+        sev = t.severity_validation or "Unknown"
+        severity_counts[sev] = severity_counts.get(sev, 0) + 1
+
+    all_detections = db.query(Detection).all()
+    fault_freq:       dict[str, int]         = {}
+    fault_confidence: dict[str, list[float]] = {}
+    for d in all_detections:
+        fault_freq[d.faulty_type] = fault_freq.get(d.faulty_type, 0) + 1
+        fault_confidence.setdefault(d.faulty_type, []).append(d.confidence_level)
+
+    fault_avg_confidence = {
+        ft: round(sum(confs) / len(confs), 3)
+        for ft, confs in fault_confidence.items()
+    }
+
+    locality_stats: dict[str, dict] = {}
+    all_joined = (
+        db.query(Task, Pillar)
+        .outerjoin(Pillar, Pillar.pillarId == Task.pillar_id)
+        .filter(Task.validation_status == "Approved")
+        .all()
+    )
+    for task, pillar in all_joined:
+        loc = (pillar.locality if pillar else None) or "Unknown"
+        if loc not in locality_stats:
+            locality_stats[loc] = {"count": 0, "total_cost": 0, "critical": 0}
+        locality_stats[loc]["count"]      += 1
+        locality_stats[loc]["total_cost"] += task.cost_estimation or 0
+        if task.severity_validation == "Critical":
+            locality_stats[loc]["critical"] += 1
+
+    now        = datetime.utcnow()
+    year_start = datetime(now.year, 1, 1)
+    monthly_tasks = db.query(Task).filter(Task.created_date >= year_start).all()
+
+    monthly_counts: dict[str, int]   = {}
+    monthly_costs:  dict[str, float] = {}
+    for t in monthly_tasks:
+        if t.created_date:
+            key = t.created_date.strftime("%b")
+            monthly_counts[key] = monthly_counts.get(key, 0) + 1
+            monthly_costs[key]  = monthly_costs.get(key, 0) + (t.cost_estimation or 0)
+
+    avg_confidence = (
+        sum(d.confidence_level for d in all_detections) / len(all_detections)
+        if all_detections else 0.0
+    )
+
+    next_month = (
+        datetime(now.year + 1, 1, 1) if now.month == 12
+        else datetime(now.year, now.month + 1, 1)
+    ).strftime("%b")
+
+    return {
+        "snapshot_date":                 now.strftime("%Y-%m-%d"),
+        "next_projection_month":         next_month,
+        "total_approved_tasks":          len(approved_tasks),
+        "total_cost_rm":                 round(total_cost, 2),
+        "avg_cost_per_task_rm":          round(avg_cost, 2),
+        "completed_maintenance":         completed_count,
+        "in_progress_maintenance":       in_progress,
+        "pending_maintenance":           pending,
+        "severity_distribution":         severity_counts,
+        "fault_type_frequency":          fault_freq,
+        "fault_type_avg_confidence":     fault_avg_confidence,
+        "locality_breakdown":            locality_stats,
+        "monthly_task_counts_this_year": monthly_counts,
+        "monthly_costs_this_year":       monthly_costs,
+        "ai_avg_detection_confidence":   round(avg_confidence, 3),
+        "total_detections":              len(all_detections),
+    }
+
+
+# ---------------------------------------------------------------------------
+# AI detection stub — replace with real YOLO inference
 # ---------------------------------------------------------------------------
 
 def run_ai_detection(image_urls: list[str]) -> list[dict]:
-    """
-    Stub — replace with real model inference.
-    Returns a list of bounding-box detections across all images.
-    """
     return [
-        {
-            "image_index": 1,
-            "faulty_type": "Crack",
-            "confidence_level": 0.93,
-            "x": 120,
-            "y": 60,
-            "width": 40,
-            "height": 30,
-        },
-        {
-            "image_index": 2,
-            "faulty_type": "Rust",
-            "confidence_level": 0.88,
-            "x": 200,
-            "y": 90,
-            "width": 70,
-            "height": 50,
-        },
+        {"image_index": 1, "faulty_type": "Crack", "confidence_level": 0.93,
+         "x": 120, "y": 60, "width": 40, "height": 30},
+        {"image_index": 2, "faulty_type": "Rust",  "confidence_level": 0.88,
+         "x": 200, "y": 90, "width": 70, "height": 50},
     ]
 
-
-# ---------------------------------------------------------------------------
-# Helper: compute overall risk from detection results
-# ---------------------------------------------------------------------------
 
 def compute_overall_risk(detections: list[dict]) -> str:
     if not detections:
@@ -153,20 +330,9 @@ def compute_overall_risk(detections: list[dict]) -> str:
 
 @app.post("/users/login")
 async def login_user(login: LoginRequest, db: db_dependency):
-    """
-    Frontend sends: { email, username }
-    NOTE: The current frontend uses a hardcoded mock — no real API call.
-    When you wire this up, replace the frontend's mock with a fetch() here.
-    Expected response shape matches what frontend stores in currentUser:
-      { exists, user: { id, name, email, username, employeeId, role } }
-    """
-    user = db.query(User).filter(
-        User.email == login.email,
-    ).first()
-
-    if not user or not login.password == user.password:
+    user = db.query(User).filter(User.email == login.email).first()
+    if not user or login.password != user.password:
         return {"exists": False}
-
     return {
         "exists": True,
         "user": {
@@ -175,7 +341,7 @@ async def login_user(login: LoginRequest, db: db_dependency):
             "email": user.email,
             "username": user.username,
             "employeeId": user.employeeId,
-            "role": user.role,          # must be lowercase: technician / supervisor / manager / admin
+            "role": user.role,
             "isActive": user.isActive,
             "locality": user.locality,
         },
@@ -183,221 +349,125 @@ async def login_user(login: LoginRequest, db: db_dependency):
 
 
 # ---------------------------------------------------------------------------
-# Users – for the UserManagement component
+# Users
 # ---------------------------------------------------------------------------
 
 @app.get("/users")
 async def get_users(db: db_dependency):
-    """
-    UserManagement component expects each user to have:
-      { id, name, email, username, employeeId, role, isActive }
-    """
-    users = db.query(User).all()
     return [
         {
-            "id": str(u.id),
-            "name": u.name,
-            "email": u.email,
-            "username": u.username,
-            "employeeId": u.employeeId,
-            "role": u.role,
-            "isActive": u.isActive,
-            "createdAt": u.createdAt,
-            "locality": u.locality,
+            "id": str(u.id), "name": u.name, "email": u.email,
+            "username": u.username, "employeeId": u.employeeId,
+            "role": u.role, "isActive": u.isActive,
+            "createdAt": u.createdAt, "locality": u.locality,
         }
-        for u in users
+        for u in db.query(User).all()
     ]
 
 
 @app.post("/users")
 async def create_user(data: UserCreate, db: db_dependency):
-    """
-    Called by handleCreateUser in UserManagement.jsx.
-    Sends: { name, email, username, employeeId, role, password, locality }
-    Returns the new user in the same shape GET /users returns.
-    """
     if db.query(User).filter(User.email == data.email).first():
-        raise HTTPException(status_code=400, detail="Email already exists")
-
+        raise HTTPException(400, "Email already exists")
     if db.query(User).filter(User.username == data.username).first():
-        raise HTTPException(status_code=400, detail="Username already exists")
-
+        raise HTTPException(400, "Username already exists")
     if db.query(User).filter(User.employeeId == data.employeeId).first():
-        raise HTTPException(status_code=400, detail="Employee ID already exists")
-
-    new_user = User(
-        name=data.name,
-        email=data.email,
-        username=data.username,
-        employeeId=data.employeeId,
-        role=data.role,
-        password=data.password,
-        locality=data.locality if data.locality else None,
-        isActive=True,
-        createdAt=datetime.utcnow(),
+        raise HTTPException(400, "Employee ID already exists")
+    u = User(
+        name=data.name, email=data.email, username=data.username,
+        employeeId=data.employeeId, role=data.role, password=data.password,
+        locality=data.locality or None, isActive=True, createdAt=datetime.utcnow(),
     )
-
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
+    db.add(u); db.commit(); db.refresh(u)
     return {
-        "id": str(new_user.id),
-        "name": new_user.name,
-        "email": new_user.email,
-        "username": new_user.username,
-        "employeeId": new_user.employeeId,
-        "role": new_user.role,
-        "isActive": new_user.isActive,
-        "createdAt": new_user.createdAt.isoformat(),
-        "locality": new_user.locality,
+        "id": str(u.id), "name": u.name, "email": u.email,
+        "username": u.username, "employeeId": u.employeeId,
+        "role": u.role, "isActive": u.isActive,
+        "createdAt": u.createdAt.isoformat(), "locality": u.locality,
     }
+
 
 @app.put("/users/{user_id}")
 async def update_user(user_id: int, data: UserUpdate, db: db_dependency):
-    """
-    Called by handleUpdateUser in UserManagement.jsx.
-    Sends: { name, email, username, employeeId, role, locality }
-    Edit dialog does NOT send password — password changes need a separate flow.
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Check uniqueness, excluding current user
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "User not found")
     if db.query(User).filter(User.email == data.email, User.id != user_id).first():
-        raise HTTPException(status_code=400, detail="Email already exists")
-
+        raise HTTPException(400, "Email already exists")
     if db.query(User).filter(User.username == data.username, User.id != user_id).first():
-        raise HTTPException(status_code=400, detail="Username already exists")
-
+        raise HTTPException(400, "Username already exists")
     if db.query(User).filter(User.employeeId == data.employeeId, User.id != user_id).first():
-        raise HTTPException(status_code=400, detail="Employee ID already exists")
-
-    user.name = data.name
-    user.email = data.email
-    user.username = data.username
-    user.employeeId = data.employeeId
-    user.role = data.role
-    user.locality = data.locality
-
+        raise HTTPException(400, "Employee ID already exists")
+    u.name = data.name; u.email = data.email; u.username = data.username
+    u.employeeId = data.employeeId; u.role = data.role; u.locality = data.locality
     db.commit()
-
     return {
-        "id": str(user.id),
-        "name": user.name,
-        "email": user.email,
-        "username": user.username,
-        "employeeId": user.employeeId,
-        "role": user.role,
-        "isActive": user.isActive,
-        "createdAt": user.createdAt.isoformat() if user.createdAt else None,
-        "locality": user.locality if user.locality else None,
+        "id": str(u.id), "name": u.name, "email": u.email,
+        "username": u.username, "employeeId": u.employeeId,
+        "role": u.role, "isActive": u.isActive,
+        "createdAt": u.createdAt.isoformat() if u.createdAt else None,
+        "locality": u.locality or None,
     }
 
 
 @app.patch("/users/{user_id}/status")
 async def toggle_user_status(user_id: int, db: db_dependency):
-    """
-    Called by handleToggleUserStatus (the Switch toggle) in UserManagement.jsx.
-    Flips isActive between True and False.
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    user.isActive = not user.isActive
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    u.isActive = not u.isActive
     db.commit()
-
     return {
-        "id": str(user.id),
-        "isActive": user.isActive,
-        "message": f"User {'activated' if user.isActive else 'deactivated'}",
+        "id": str(u.id), "isActive": u.isActive,
+        "message": f"User {'activated' if u.isActive else 'deactivated'}",
     }
 
 
 @app.delete("/users/{user_id}")
 async def delete_user(user_id: int, db: db_dependency):
-    """
-    Called by confirmDeleteUser in UserManagement.jsx.
-    Hard-deletes the user row. Consider soft-delete (isActive=False) for production.
-    """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    db.delete(user)
-    db.commit()
-
-    return {"message": f"User {user.name} deleted"}
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    db.delete(u); db.commit()
+    return {"message": f"User {u.name} deleted"}
 
 
 # ---------------------------------------------------------------------------
-# Tasks
+# Pillars & Tasks
 # ---------------------------------------------------------------------------
 
 @app.get("/pillars")
 async def get_pillars(db: db_dependency):
-    """
-    Returns all pillars, excluding those that already have an active (non-Completed) task.
-    Used by TechnicianDashboard create task dropdown.
-    """
-    # Get pillar IDs already assigned to an active task
-    active_pillar_ids = {
-        row[0]
-        for row in db.query(Task.pillar_id)
-        .filter(Task.task_status.notin_(["Completed"]))
-        .all()
+    active_ids = {
+        r[0] for r in db.query(Task.pillar_id)
+        .filter(Task.task_status.notin_(["Completed"])).all()
     }
- 
-    pillars = db.query(Pillar).all()
- 
     return [
-        {
-            "pillarId": p.pillarId,
-            "address": p.address,
-            "locality": p.locality,
-        }
-        for p in pillars
-        if p.pillarId not in active_pillar_ids
+        {"pillarId": p.pillarId, "address": p.address, "locality": p.locality}
+        for p in db.query(Pillar).all()
+        if p.pillarId not in active_ids
     ]
 
 
 @app.get("/tasks")
 async def get_tasks(db: db_dependency):
-    """
-    TechnicianDashboard / EnhancedMapView expect each task to have:
-      { id, pillarId, location, address, locality, coordinates, assignedTo, status, dueDate, createdAt }
-    """
     Technician = aliased(User)
-
     rows = (
         db.query(
-            Task.task_id,
-            Task.pillar_id,
-            Task.task_status,
-            Task.due_date,
-            Task.created_date,
-            Pillar.address,
-            Pillar.locality,
-            Pillar.coordinates,
+            Task.task_id, Task.pillar_id, Task.task_status, Task.due_date,
+            Task.created_date, Pillar.address, Pillar.locality, Pillar.coordinates,
             Technician.name.label("technician_name"),
         )
         .outerjoin(Pillar, Pillar.pillarId == Task.pillar_id)
         .outerjoin(Technician, Technician.employeeId == Task.assigned_to)
         .all()
     )
-
     return [
         {
-            "id": str(r.task_id),
-            "pillarId": r.pillar_id,
-            "location": r.address,       # frontend uses "location" as the display name
-            "address": r.address,
-            "locality": r.locality,
-            "coordinates": r.coordinates,  # { lat, lng } JSON stored in DB
-            "assignedTo": r.technician_name,
-            "status": r.task_status,
+            "id": str(r.task_id), "pillarId": r.pillar_id,
+            "location": r.address, "address": r.address,
+            "locality": r.locality, "coordinates": r.coordinates,
+            "assignedTo": r.technician_name, "status": r.task_status,
             "dueDate": r.due_date.isoformat() if r.due_date else None,
             "createdAt": r.created_date.isoformat() if r.created_date else None,
         }
@@ -405,56 +475,35 @@ async def get_tasks(db: db_dependency):
     ]
 
 
-def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Return great-circle distance in km between two (lat, lng) points."""
+def _haversine_km(lat1, lng1, lat2, lng2):
     R = 6371.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lng2 - lng1)
+    dphi, dlambda = math.radians(lat2 - lat1), math.radians(lng2 - lng1)
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def _technician_centroid(tech_employee_id: str, db: Session):
-    """
-    Compute a technician's approximate location as the centroid of all
-    pillars currently assigned to them (any non-Completed task).
-    Returns (lat, lng) or None if they have no prior assignments.
-    """
-    active_statuses = ["Pending", "In Progress", "Submitted", "Validated"]
-    assigned_pillar_ids = (
-        db.query(Task.pillar_id)
-        .filter(Task.assigned_to == tech_employee_id, Task.task_status.in_(active_statuses))
-        .all()
-    )
-    if not assigned_pillar_ids:
+def _technician_centroid(tech_employee_id, db):
+    active = ["Pending", "In Progress", "Submitted", "Validated"]
+    pids = db.query(Task.pillar_id).filter(
+        Task.assigned_to == tech_employee_id,
+        Task.task_status.in_(active),
+    ).all()
+    if not pids:
         return None
-
     coords = []
-    for (pid,) in assigned_pillar_ids:
-        pillar = db.query(Pillar).filter(Pillar.pillarId == pid).first()
-        if pillar and pillar.coordinates:
-            coords.append((pillar.coordinates["lat"], pillar.coordinates["lng"]))
-
+    for (pid,) in pids:
+        p = db.query(Pillar).filter(Pillar.pillarId == pid).first()
+        if p and p.coordinates:
+            coords.append((p.coordinates["lat"], p.coordinates["lng"]))
     if not coords:
         return None
-
-    avg_lat = sum(c[0] for c in coords) / len(coords)
-    avg_lng = sum(c[1] for c in coords) / len(coords)
-    return (avg_lat, avg_lng)
+    return (sum(c[0] for c in coords) / len(coords), sum(c[1] for c in coords) / len(coords))
 
 
-def _locality_centroid(locality: str, db: Session):
-    """
-    Fallback: centroid of all pillars in the given locality.
-    Used when a technician has no prior task assignments.
-    """
+def _locality_centroid(locality, db):
     pillars = db.query(Pillar).filter(Pillar.locality == locality).all()
-    coords = [
-        (p.coordinates["lat"], p.coordinates["lng"])
-        for p in pillars
-        if p.coordinates
-    ]
+    coords  = [(p.coordinates["lat"], p.coordinates["lng"]) for p in pillars if p.coordinates]
     if not coords:
         return None
     return (sum(c[0] for c in coords) / len(coords), sum(c[1] for c in coords) / len(coords))
@@ -462,91 +511,46 @@ def _locality_centroid(locality: str, db: Session):
 
 @app.post("/tasks")
 async def create_task(task: TaskCreate, db: db_dependency):
-    """
-    Assigns the task to the nearest available technician based on geographic
-    proximity rather than strict locality matching.
-
-    Algorithm:
-    1. Compute each active technician's "base location" as the centroid of
-       their currently active assigned pillars.
-    2. If a technician has no active tasks yet, fall back to the centroid of
-       all pillars in their registered locality.
-    3. Pick the technician closest (haversine distance) to the new pillar.
-    4. Tiebreak on fewest active (non-Completed) tasks — spreads workload evenly.
-    """
     pillar = db.query(Pillar).filter(Pillar.pillarId == task.pillar_id).first()
     if not pillar:
-        raise HTTPException(status_code=404, detail="Pillar not found")
-
+        raise HTTPException(404, "Pillar not found")
     if not pillar.coordinates:
-        raise HTTPException(status_code=400, detail="Pillar has no coordinates — cannot compute nearest technician")
+        raise HTTPException(400, "Pillar has no coordinates")
 
-    target_lat = pillar.coordinates["lat"]
-    target_lng = pillar.coordinates["lng"]
+    tlat, tlng = pillar.coordinates["lat"], pillar.coordinates["lng"]
+    techs = db.query(User).filter(User.role == "technician", User.isActive == True).all()
+    if not techs:
+        raise HTTPException(404, "No active technicians found")
 
-    # All active technicians (no locality filter)
-    technicians = db.query(User).filter(
-        User.role == "technician",
-        User.isActive == True,
-    ).all()
-
-    if not technicians:
-        raise HTTPException(status_code=404, detail="No active technicians found")
-
-    active_statuses = ["Pending", "In Progress", "Submitted", "Validated"]
-
-    best_tech = None
-    best_distance = float("inf")
-    best_workload = float("inf")
-
-    for tech in technicians:
-        # Determine tech's approximate location
-        centroid = _technician_centroid(tech.employeeId, db)
-        if centroid is None:
-            centroid = _locality_centroid(tech.locality, db) if tech.locality else None
-        if centroid is None:
-            # No spatial data at all — skip this technician
+    active = ["Pending", "In Progress", "Submitted", "Validated"]
+    best, best_d, best_w = None, float("inf"), float("inf")
+    for tech in techs:
+        c = _technician_centroid(tech.employeeId, db) or \
+            (_locality_centroid(tech.locality, db) if tech.locality else None)
+        if not c:
             continue
-
-        distance = _haversine_km(target_lat, target_lng, centroid[0], centroid[1])
-        workload = db.query(Task).filter(
+        d = _haversine_km(tlat, tlng, c[0], c[1])
+        w = db.query(Task).filter(
             Task.assigned_to == tech.employeeId,
-            Task.task_status.in_(active_statuses),
+            Task.task_status.in_(active),
         ).count()
+        if d < best_d or (d == best_d and w < best_w):
+            best, best_d, best_w = tech, d, w
 
-        # Pick closest; break ties by fewest active tasks
-        if distance < best_distance or (distance == best_distance and workload < best_workload):
-            best_tech = tech
-            best_distance = distance
-            best_workload = workload
+    if not best:
+        raise HTTPException(404, "No technician with location data found")
 
-    if not best_tech:
-        raise HTTPException(
-            status_code=404,
-            detail="No technician with location data found — ensure technicians have a locality or existing task assignments",
-        )
-
-    new_task = Task(
-        pillar_id=task.pillar_id,
-        due_date=task.due_date,
-        assigned_to=best_tech.employeeId,
-        created_by=task.created_by,
-        task_status="Pending",
-        created_date=datetime.utcnow(),
-        updated_date=datetime.utcnow(),
+    t = Task(
+        pillar_id=task.pillar_id, due_date=task.due_date,
+        assigned_to=best.employeeId, created_by=task.created_by,
+        task_status="Pending", created_date=datetime.utcnow(), updated_date=datetime.utcnow(),
     )
-
-    db.add(new_task)
-    db.commit()
-    db.refresh(new_task)
-
+    db.add(t); db.commit(); db.refresh(t)
     return {
         "message": "Task created and assigned to nearest technician",
-        "task_id": new_task.task_id,
-        "assigned_to": best_tech.employeeId,
-        "assigned_to_name": best_tech.name,
-        "distance_km": round(best_distance, 2),
-        "active_tasks": best_workload,
+        "task_id": t.task_id, "assigned_to": best.employeeId,
+        "assigned_to_name": best.name,
+        "distance_km": round(best_d, 2), "active_tasks": best_w,
     }
 
 
@@ -554,186 +558,105 @@ async def create_task(task: TaskCreate, db: db_dependency):
 async def reassign_task(task_id: int, data: TaskReassign, db: db_dependency):
     task = db.query(Task).filter(Task.task_id == task_id).first()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
+        raise HTTPException(404, "Task not found")
     if task.task_status == "Completed":
-        raise HTTPException(status_code=400, detail="Completed task cannot be reassigned")
-
-    technician = db.query(User).filter(
+        raise HTTPException(400, "Cannot reassign completed task")
+    tech = db.query(User).filter(
         User.employeeId == data.new_employee_id,
-        User.role == "technician",   # lowercase, matching DB convention
-        User.isActive == True,
+        User.role == "technician", User.isActive == True,
     ).first()
-
-    if not technician:
-        raise HTTPException(status_code=404, detail="Technician not found or inactive")
-
-    old_technician = task.assigned_to
-    task.assigned_to = technician.employeeId
+    if not tech:
+        raise HTTPException(404, "Technician not found or inactive")
+    old = task.assigned_to
+    task.assigned_to = tech.employeeId
     task.updated_date = datetime.utcnow()
-
     db.commit()
-
-    return {
-        "message": "Task reassigned successfully",
-        "task_id": task_id,
-        "previous_technician": old_technician,
-        "new_technician": technician.employeeId,
-    }
+    return {"message": "Task reassigned", "task_id": task_id,
+            "previous_technician": old, "new_technician": tech.employeeId}
 
 
 @app.put("/tasks/{task_id}/submit")
 async def submit_task(task_id: int, data: TaskSubmit, db: db_dependency):
-    """
-    AuditForm submits 4 base64 images + GPS coordinates.
-    After saving, runs AI detection and stores results in Photo + Detection tables.
-
-    Returns detection results so frontend can immediately show the AI overlay.
-    Frontend shape expected by DetectionResults:
-      [{ imageUrl, side, boundingBoxes: [{ x, y, width, height, faultType, confidence }], overallRisk }]
-    """
     task = db.query(Task).filter(Task.task_id == task_id).first()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(404, "Task not found")
 
-    # Upload images to GCS (falls back to base64 if GCS not configured)
     sides = ["front", "right", "back", "left"]
-    raw_images = [data.image1, data.image2, data.image3, data.image4]
-    image_urls = [
+    raw   = [data.image1, data.image2, data.image3, data.image4]
+    urls  = [
         upload_image_to_gcs(img, f"audit/task_{task_id}_{sides[i]}_{uuid.uuid4().hex[:8]}.jpg")
-        for i, img in enumerate(raw_images)
+        for i, img in enumerate(raw)
     ]
 
-    task.image_1 = image_urls[0]
-    task.image_2 = image_urls[1]
-    task.image_3 = image_urls[2]
-    task.image_4 = image_urls[3]
-    task.user_current_location = data.user_current_location   # { lat, lng }
+    task.image_1 = urls[0]; task.image_2 = urls[1]
+    task.image_3 = urls[2]; task.image_4 = urls[3]
+    task.user_current_location = data.user_current_location
     task.task_status = "Submitted"
     task.updated_date = datetime.utcnow()
     db.commit()
 
-    # Run AI detection (pass URLs or base64 — run_ai_detection handles both)
-    image_urls_for_ai = raw_images  # AI model still receives original base64 for inference
-    ai_results = run_ai_detection(image_urls_for_ai)
-
-    inference_json = {
-        "status": "Fault detected" if ai_results else "No Fault",
-        "total_detection": len(ai_results),
-        "detections": ai_results,
-    }
-
+    ai       = run_ai_detection(raw)
     photo_id = str(uuid.uuid4())
-    photo = Photo(
-        photo_id=photo_id,
-        task_id=task_id,
-        inference=inference_json,
+    db.add(Photo(
+        photo_id=photo_id, task_id=task_id,
+        inference={"status": "Fault detected" if ai else "No Fault",
+                   "total_detection": len(ai), "detections": ai},
         created_date=datetime.utcnow(),
-    )
-    db.add(photo)
+    ))
+    db.commit()
+    for r in ai:
+        db.add(Detection(
+            photo_id=photo_id, task_id=task_id, image_index=r["image_index"],
+            x=r["x"], y=r["y"], width=r["width"], height=r["height"],
+            faulty_type=r["faulty_type"], confidence_level=r["confidence_level"],
+        ))
     db.commit()
 
-    for r in ai_results:
-        box = Detection(
-            photo_id=photo_id,
-            task_id=task_id,
-            image_index=r["image_index"],
-            x=r["x"],
-            y=r["y"],
-            width=r["width"],
-            height=r["height"],
-            faulty_type=r["faulty_type"],
-            confidence_level=r["confidence_level"],
-        )
-        db.add(box)
-
-    db.commit()
-
-    # Build response — sign the stored GCS paths so frontend can render images immediately
-    sides = ["front", "right", "back", "left"]
-    images = sign_image_list(image_urls)  # image_urls are now GCS blob paths
-    overall_risk = compute_overall_risk(ai_results)
-
-    detection_results = [
-        {
-            "imageUrl": images[i],
-            "side": sides[i],
-            "boundingBoxes": [
-                {
-                    "x": r["x"],
-                    "y": r["y"],
-                    "width": r["width"],
-                    "height": r["height"],
-                    "faultType": r["faulty_type"],
-                    "confidence": r["confidence_level"],
-                }
-                for r in ai_results
-                if r["image_index"] == i + 1
-            ],
-            "overallRisk": overall_risk,
-        }
-        for i in range(4)
-    ]
-
+    images = sign_image_list(urls)
+    risk   = compute_overall_risk(ai)
     return {
         "message": "Task submitted and detection completed",
-        "photo_id": photo_id,
-        "detectionResults": detection_results,     # matches frontend 'detectionResults' key
-        "overallRisk": overall_risk,
+        "photo_id": photo_id, "overallRisk": risk,
+        "detectionResults": [
+            {
+                "imageUrl": images[i], "side": sides[i], "overallRisk": risk,
+                "boundingBoxes": [
+                    {"x": r["x"], "y": r["y"], "width": r["width"], "height": r["height"],
+                     "faultType": r["faulty_type"], "confidence": r["confidence_level"]}
+                    for r in ai if r["image_index"] == i + 1
+                ],
+            }
+            for i in range(4)
+        ],
     }
 
 
 @app.get("/detection/{task_id}")
 async def get_detection(task_id: int, db: db_dependency):
-    """
-    Returns detection results for a previously submitted task.
-    Shape matches DetectionResults component expectations.
-    """
     task = db.query(Task).filter(Task.task_id == task_id).first()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
+        raise HTTPException(404, "Task not found")
     photo = db.query(Photo).filter(Photo.task_id == task_id).first()
     if not photo:
         return []
-
-    boxes = db.query(Detection).filter(Detection.photo_id == photo.photo_id).all()
-
-    sides = ["front", "right", "back", "left"]
+    boxes  = db.query(Detection).filter(Detection.photo_id == photo.photo_id).all()
+    sides  = ["front", "right", "back", "left"]
     images = sign_image_list([task.image_1, task.image_2, task.image_3, task.image_4])
-
-    all_detections = [
-        {
-            "x": b.x,
-            "y": b.y,
-            "width": b.width,
-            "height": b.height,
-            "faulty_type": b.faulty_type,
-            "confidence_level": b.confidence_level,
-            "image_index": b.image_index,
-        }
+    dets   = [
+        {"x": b.x, "y": b.y, "width": b.width, "height": b.height,
+         "faulty_type": b.faulty_type, "confidence_level": b.confidence_level,
+         "image_index": b.image_index}
         for b in boxes
     ]
-
-    overall_risk = compute_overall_risk(all_detections)
-
+    risk = compute_overall_risk(dets)
     return [
         {
-            "imageUrl": images[i],
-            "side": sides[i],
+            "imageUrl": images[i], "side": sides[i], "overallRisk": risk,
             "boundingBoxes": [
-                {
-                    "x": d["x"],
-                    "y": d["y"],
-                    "width": d["width"],
-                    "height": d["height"],
-                    "faultType": d["faulty_type"],
-                    "confidence": d["confidence_level"],
-                }
-                for d in all_detections
-                if d["image_index"] == i + 1
+                {"x": d["x"], "y": d["y"], "width": d["width"], "height": d["height"],
+                 "faultType": d["faulty_type"], "confidence": d["confidence_level"]}
+                for d in dets if d["image_index"] == i + 1
             ],
-            "overallRisk": overall_risk,
         }
         for i in range(4)
     ]
@@ -741,63 +664,31 @@ async def get_detection(task_id: int, db: db_dependency):
 
 @app.put("/tasks/{task_id}/validate")
 async def validate_task(task_id: int, data: TaskValidation, db: db_dependency):
-    """
-    SupervisorReview calls this when approving a submission.
-    Stores severity, priority, cost, remarks, who validated.
-    """
     task = db.query(Task).filter(Task.task_id == task_id).first()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    task.validation_status = data.validation_status
+        raise HTTPException(404, "Task not found")
+    task.validation_status  = data.validation_status
     task.severity_validation = data.severity_validation
-    task.cost_estimation = data.cost_estimation
-    task.remarks = data.remarks
-    task.validation_by = data.validation_by
-    task.task_status = "Validated"
-    task.updated_date = datetime.utcnow()
-
-    db.commit()
-    db.refresh(task)
-
+    task.cost_estimation    = data.cost_estimation
+    task.remarks            = data.remarks
+    task.validation_by      = data.validation_by
+    task.task_status        = "Validated"
+    task.updated_date       = datetime.utcnow()
+    db.commit(); db.refresh(task)
     return {"message": "Task validated"}
 
 
 @app.get("/submissions")
 async def get_submissions(db: db_dependency):
-    """
-    Returns all tasks that have been submitted (task_status in Submitted/Validated/Completed),
-    reconstructed in the shape the frontend's `submissions` state expects:
-    {
-      id, taskId, pillarId, location, address, coordinates, images,
-      submittedBy, submittedAt, detectionStatus, detectionResults,
-      overallRisk, validationStatus, sentToSupervisor,
-      validated, approvalData
-    }
-    This allows the frontend to re-hydrate the submissions list after a
-    page refresh or logout/login without losing audit history.
-    """
     Technician = aliased(User)
-
     rows = (
         db.query(
-            Task.task_id,
-            Task.pillar_id,
-            Task.task_status,
-            Task.image_1,
-            Task.image_2,
-            Task.image_3,
-            Task.image_4,
-            Task.user_current_location,
-            Task.updated_date,
-            Task.validation_status,
-            Task.severity_validation,
-            Task.cost_estimation,
-            Task.remarks,
-            Task.validation_by,
-            Pillar.address,
-            Pillar.coordinates,
-            Pillar.locality,
+            Task.task_id, Task.pillar_id, Task.task_status,
+            Task.image_1, Task.image_2, Task.image_3, Task.image_4,
+            Task.user_current_location, Task.updated_date,
+            Task.validation_status, Task.severity_validation,
+            Task.cost_estimation, Task.remarks, Task.validation_by,
+            Pillar.address, Pillar.coordinates, Pillar.locality,
             Technician.name.label("technician_name"),
         )
         .outerjoin(Pillar, Pillar.pillarId == Task.pillar_id)
@@ -805,167 +696,96 @@ async def get_submissions(db: db_dependency):
         .filter(Task.task_status.in_(["Submitted", "Validated", "Completed"]))
         .all()
     )
-
     result = []
     for r in rows:
-        # Fetch photo and detection boxes
         photo = db.query(Photo).filter(Photo.task_id == r.task_id).first()
         boxes = db.query(Detection).filter(Detection.task_id == r.task_id).all()
-
-        all_detections = [
-            {
-                "x": b.x, "y": b.y, "width": b.width, "height": b.height,
-                "faulty_type": b.faulty_type, "confidence_level": b.confidence_level,
-                "image_index": b.image_index,
-            }
+        dets  = [
+            {"x": b.x, "y": b.y, "width": b.width, "height": b.height,
+             "faulty_type": b.faulty_type, "confidence_level": b.confidence_level,
+             "image_index": b.image_index}
             for b in boxes
         ]
-        overall_risk = compute_overall_risk(all_detections)
-
+        risk  = compute_overall_risk(dets)
         sides = ["front", "right", "back", "left"]
-        images_data = sign_image_list([r.image_1, r.image_2, r.image_3, r.image_4])
-
-        detection_results = [
+        imgs  = sign_image_list([r.image_1, r.image_2, r.image_3, r.image_4])
+        det_results = [
             {
-                "imageUrl": images_data[i],
-                "side": sides[i],
+                "imageUrl": imgs[i], "side": sides[i], "overallRisk": risk,
                 "boundingBoxes": [
-                    {
-                        "x": d["x"], "y": d["y"], "width": d["width"], "height": d["height"],
-                        "faultType": d["faulty_type"], "confidence": d["confidence_level"],
-                    }
-                    for d in all_detections if d["image_index"] == i + 1
+                    {"x": d["x"], "y": d["y"], "width": d["width"], "height": d["height"],
+                     "faultType": d["faulty_type"], "confidence": d["confidence_level"]}
+                    for d in dets if d["image_index"] == i + 1
                 ],
-                "overallRisk": overall_risk,
             }
             for i in range(4)
         ]
-
-        is_validated = r.validation_status in ("Approved", "Rejected")
-        approval_data = None
-        if r.validation_status == "Approved":
-            approval_data = {
-                "severity": r.severity_validation,
-                "costEstimation": r.cost_estimation,
-                "remarks": r.remarks,
-                "validatedBy": r.validation_by,
-            }
-
+        is_validated  = r.validation_status in ("Approved", "Rejected")
+        approval_data = (
+            {"severity": r.severity_validation, "costEstimation": r.cost_estimation,
+             "remarks": r.remarks, "validatedBy": r.validation_by}
+            if r.validation_status == "Approved" else None
+        )
         result.append({
             "id": photo.photo_id if photo else str(r.task_id),
-            "taskId": str(r.task_id),
-            "pillarId": r.pillar_id,
-            "location": r.address,
-            "address": r.address,
-            "locality": r.locality,
+            "taskId": str(r.task_id), "pillarId": r.pillar_id,
+            "location": r.address, "address": r.address, "locality": r.locality,
             "coordinates": r.user_current_location or r.coordinates,
-            "images": [
-                {"side": sides[i], "imageUrl": images_data[i]}
-                for i in range(4)
-            ],
+            "images": [{"side": sides[i], "imageUrl": imgs[i]} for i in range(4)],
             "submittedBy": r.technician_name,
             "submittedAt": r.updated_date.isoformat() if r.updated_date else None,
-            "detectionStatus": "Completed",
-            "detectionResults": detection_results,
-            "overallRisk": overall_risk,
-            "validationStatus": r.validation_status or "Pending",
-            "sentToSupervisor": True,   # already submitted = already visible to supervisor
-            "validated": is_validated,
-            "approvalData": approval_data,
+            "detectionStatus": "Completed", "detectionResults": det_results,
+            "overallRisk": risk, "validationStatus": r.validation_status or "Pending",
+            "sentToSupervisor": True, "validated": is_validated, "approvalData": approval_data,
         })
-
     return result
 
 
 @app.put("/tasks/{task_id}/maintenance")
 async def update_maintenance(task_id: int, data: TaskMaintenance, db: db_dependency):
-    """
-    Single endpoint for all maintenance updates.
-    Appends a new entry to work_log JSON array, then updates status fields.
-    - Technician adding work log: maintenance_status = "In Progress", logged_by = tech employeeId
-    - Supervisor completing:      maintenance_status = "Completed",   maintenance_validate_by = supervisor employeeId
-    """
     task = db.query(Task).filter(Task.task_id == task_id).first()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    # Guard: work_log may be None, a dict (bad old data), or already a list
-    raw = task.work_log
-    if isinstance(raw, list):
-        existing_logs = raw
-    elif isinstance(raw, dict):
-        existing_logs = [raw]   # migrate old single-dict format to list
-    else:
-        existing_logs = []
-
-    # Upload work log images to GCS
-    uploaded_images = [
+        raise HTTPException(404, "Task not found")
+    raw  = task.work_log
+    logs = raw if isinstance(raw, list) else ([raw] if isinstance(raw, dict) else [])
+    uploaded = [
         upload_image_to_gcs(img, f"maintenance/task_{task_id}_worklog_{uuid.uuid4().hex[:8]}.jpg")
         for img in (data.images or [])
     ]
-
-    new_entry = {
-        "action": data.action,
-        "notes": data.notes,
-        "images": uploaded_images,
+    logs.append({
+        "action": data.action, "notes": data.notes, "images": uploaded,
         "logged_by": data.logged_by,
         "logged_by_name": db.query(User.name).filter(User.employeeId == data.logged_by).scalar(),
         "timestamp": datetime.utcnow().isoformat(),
-    }
-    task.work_log = existing_logs + [new_entry]
-
+    })
+    task.work_log           = logs
     task.maintenance_status = data.maintenance_status
-    task.logged_by = data.logged_by
-
+    task.logged_by          = data.logged_by
     if data.completion_evidence:
         task.completion_evidence = upload_image_to_gcs(
             data.completion_evidence,
-            f"maintenance/task_{task_id}_completion_{uuid.uuid4().hex[:8]}.jpg"
+            f"maintenance/task_{task_id}_completion_{uuid.uuid4().hex[:8]}.jpg",
         )
     if data.maintenance_validate_by:
         task.maintenance_validate_by = data.maintenance_validate_by
     if data.maintenance_status == "Completed":
         task.task_status = "Completed"
-
     task.updated_date = datetime.utcnow()
-    db.commit()
-    db.refresh(task)
-
-    return {
-        "message": "Maintenance updated",
-        "task_id": task_id,
-        "maintenance_status": task.maintenance_status,
-        "work_log": task.work_log
-    }
+    db.commit(); db.refresh(task)
+    return {"message": "Maintenance updated", "task_id": task_id,
+            "maintenance_status": task.maintenance_status, "work_log": task.work_log}
 
 
 @app.get("/maintenance")
 async def get_maintenance(db: db_dependency):
-    """
-    Returns all tasks with validation_status = 'Approved' 
-    in the shape MaintenanceList expects.
-    """
     Technician = aliased(User)
-
     rows = (
         db.query(
-            Task.task_id,
-            Task.pillar_id,
-            Task.task_status,
-            Task.maintenance_status,
-            Task.severity_validation,
-            Task.cost_estimation,
-            Task.remarks,
-            Task.work_log,
-            Task.due_date,
-            Task.updated_date,
-            Task.image_1,
-            Task.image_2,
-            Task.image_3,
-            Task.image_4,
-            Task.user_current_location,
-            Pillar.address,
-            Pillar.coordinates,
+            Task.task_id, Task.pillar_id, Task.task_status, Task.maintenance_status,
+            Task.severity_validation, Task.cost_estimation, Task.remarks, Task.work_log,
+            Task.due_date, Task.updated_date,
+            Task.image_1, Task.image_2, Task.image_3, Task.image_4,
+            Task.user_current_location, Pillar.address, Pillar.coordinates,
             Technician.name.label("technician_name"),
         )
         .outerjoin(Pillar, Pillar.pillarId == Task.pillar_id)
@@ -973,54 +793,70 @@ async def get_maintenance(db: db_dependency):
         .filter(Task.validation_status == "Approved")
         .all()
     )
-
     result = []
     for r in rows:
-        # Fetch detections for bounding boxes per image
         boxes = db.query(Detection).filter(Detection.task_id == r.task_id).all()
         faults = list(set(b.faulty_type for b in boxes))
-
-        sides = ["front", "right", "back", "left"]
-        images_data = sign_image_list([r.image_1, r.image_2, r.image_3, r.image_4])
-
-        previous_detections = [
+        sides  = ["front", "right", "back", "left"]
+        imgs   = sign_image_list([r.image_1, r.image_2, r.image_3, r.image_4])
+        prev_dets = [
             {
-                "side": sides[i],
-                "imageUrl": images_data[i],
+                "side": sides[i], "imageUrl": imgs[i],
                 "boundingBoxes": [
-                    {
-                        "x": b.x, "y": b.y, "width": b.width, "height": b.height,
-                        "faultType": b.faulty_type, "confidence": b.confidence_level,
-                    }
+                    {"x": b.x, "y": b.y, "width": b.width, "height": b.height,
+                     "faultType": b.faulty_type, "confidence": b.confidence_level}
                     for b in boxes if b.image_index == i + 1
                 ],
             }
-            for i in range(4)
-            if images_data[i]   # only include sides that have an image
+            for i in range(4) if imgs[i]
         ]
-
         result.append({
-            "id": str(r.task_id),
-            "taskId": str(r.task_id),
-            "pillarId": r.pillar_id,
-            "address": r.address,
-            "coordinates": r.user_current_location or r.coordinates,
-            "severity": r.severity_validation,
-            "estimatedCost": r.cost_estimation or 0,
-            "notes": r.remarks,
-            "faults": faults,
-            "status": r.maintenance_status or "Pending",
+            "id": str(r.task_id), "taskId": str(r.task_id), "pillarId": r.pillar_id,
+            "address": r.address, "coordinates": r.user_current_location or r.coordinates,
+            "severity": r.severity_validation, "estimatedCost": r.cost_estimation or 0,
+            "notes": r.remarks, "faults": faults, "status": r.maintenance_status or "Pending",
             "workLogs": [
-                {
-                    **log,
-                    "images": sign_image_list(log.get("images") or [])
-                }
+                {**log, "images": sign_image_list(log.get("images") or [])}
                 for log in (r.work_log or [])
             ],
             "assignedTo": r.technician_name,
             "scheduledDate": r.due_date.isoformat() if r.due_date else None,
             "createdAt": r.updated_date.isoformat() if r.updated_date else None,
-            "previousDetections": previous_detections,
+            "previousDetections": prev_dets,
         })
-
     return result
+
+
+# ---------------------------------------------------------------------------
+# Analytics insights
+# ---------------------------------------------------------------------------
+
+@app.get("/analytics/insights")
+async def get_analytics_insights(db: db_dependency):
+    """
+    AI-generated report via LangChain + Gemini structured output.
+    Covers: executive insight, risk level, 6-month cost projection,
+    per-severity analysis, per-fault-type analysis, recommendations.
+    """
+    stats = _aggregate_stats(db)
+    try:
+        report: AnalyticsInsightsReport = await _analytics_chain.ainvoke(
+            {"stats": json.dumps(stats, indent=2, ensure_ascii=False)}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI report generation failed: {str(e)[:400]}",
+        )
+    return {
+        "stats":             stats,
+        "insight":           report.insight,
+        "riskLevel":         report.risk_level,
+        "potentialSavings":  report.potential_savings,
+        "costProjection":    [m.model_dump() for m in report.cost_projection],
+        "severityInsights":  [s.model_dump() for s in report.severity_insights],
+        "severitySummary":   report.severity_summary,
+        "faultTypeInsights": [f.model_dump() for f in report.fault_type_insights],
+        "faultSummary":      report.fault_summary,
+        "recommendations":   report.recommendations,
+    }
