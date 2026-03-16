@@ -16,14 +16,11 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
   const isSupervisorOrAbove = currentUser && ['supervisor', 'manager', 'admin'].includes(currentUser.role);
 
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString('en-AU', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatDateOnly = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return 'N/A';
+    return date.toLocaleDateString();
   };
 
   const getRiskColor = (risk) => {
@@ -294,7 +291,22 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
               </div>
               <div>
                 <span className="text-gray-600">Submitted At:</span>
-                <p className="font-medium">{formatDate(submission.submittedAt)}</p>
+                <p className="font-medium">{formatDateOnly(submission.submittedAt)}</p>
+              </div>
+              <div>
+                <span className="text-gray-600">Due Date:</span>
+                <div
+                  className={`mt-1 flex items-center justify-between rounded-lg border px-3 py-2 ${
+                    submission.dueDate ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <span className={`text-sm font-semibold ${submission.dueDate ? 'text-red-900' : 'text-gray-700'}`}>
+                    {formatDateOnly(submission.dueDate)}
+                  </span>
+                  {submission.dueDate && (
+                    <Badge className="bg-red-600 text-white hover:bg-red-600">Due</Badge>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

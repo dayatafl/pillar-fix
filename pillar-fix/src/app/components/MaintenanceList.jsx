@@ -18,7 +18,6 @@ import { Banknote } from 'lucide-react';
 
 export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateStatus }) {
   const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -31,8 +30,7 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
 
   const filteredItems = visibleItems.filter(item => {
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-    const matchesPriority = priorityFilter === 'all' || item.priority === priorityFilter;
-    return matchesStatus && matchesPriority;
+    return matchesStatus;
   });
 
   const stats = {
@@ -53,16 +51,6 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
       'Verified': 'bg-green-100 text-green-700',
     };
     return <Badge className={colors[status]}>{status}</Badge>;
-  };
-
-  const getPriorityBadge = (priority) => {
-    const colors = {
-      'Urgent': 'bg-red-100 text-red-700',
-      'High': 'bg-orange-100 text-orange-700',
-      'Medium': 'bg-yellow-100 text-yellow-700',
-      'Low': 'bg-blue-100 text-blue-700',
-    };
-    return <Badge className={colors[priority]}>{priority}</Badge>;
   };
 
   const renderStatusPill = (status) => {
@@ -172,30 +160,14 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
               <SelectValue placeholder="All Status" />
             </div>
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="Pending">Pending</SelectItem>
-            <SelectItem value="Approved">Approved</SelectItem>
-            <SelectItem value="In Progress">In Progress</SelectItem>
-            <SelectItem value="Completed">Completed</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="w-60 bg-white border rounded-md px-3 py-2 text-sm shadow-sm cursor-pointer ring-offset-white focus:ring-0 focus:ring-offset-0 font-semibold">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 shrink-0" />
-              <SelectValue placeholder="All Priorities" />
-            </div>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Priorities</SelectItem>
-            <SelectItem value="Urgent">Urgent</SelectItem>
-            <SelectItem value="High">High</SelectItem>
-            <SelectItem value="Medium">Medium</SelectItem>
-            <SelectItem value="Low">Low</SelectItem>
-          </SelectContent>
-        </Select>
+        <SelectContent>
+          <SelectItem value="all">All Status</SelectItem>
+          <SelectItem value="Pending">Pending</SelectItem>
+          <SelectItem value="Approved">Approved</SelectItem>
+          <SelectItem value="In Progress">In Progress</SelectItem>
+          <SelectItem value="Completed">Completed</SelectItem>
+        </SelectContent>
+      </Select>
       </div>
 
       {/* Maintenance Items */}
@@ -219,7 +191,6 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
                     <h3 className="text-sm font-semibold break-all">{item.pillarId}</h3>
                     <div className="flex flex-wrap gap-2 justify-end">
                       {item.status !== 'Pending' && item.status !== 'In Progress' && item.status !== 'Completed' && getStatusBadge(item.status)}
-                      {getPriorityBadge(item.priority)}
                     </div>
                   </div>
 
@@ -283,7 +254,6 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {item.status !== 'Pending' && item.status !== 'In Progress' && item.status !== 'Completed' && getStatusBadge(item.status)}
-                        {getPriorityBadge(item.priority)}
                       </div>
                     </div>
 
