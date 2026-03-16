@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MapPin, CheckCircle, Clock, AlertCircle, UserRound, ClipboardPen, Eye, CalendarDays, ChevronDownIcon, Filter} from 'lucide-react';
+import { MapPin, CheckCircle, Clock, AlertCircle, UserRound, ClipboardPen, Eye, CalendarDays, ChevronDownIcon, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
@@ -9,6 +9,7 @@ import { Label } from '@/app/components/ui/label';
 import { Input } from '@/app/components/ui/input';
 import { Calendar } from '@/app/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/app/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/app/components/ui/command';
 import { toast } from 'sonner';
 import { format, isSameDay } from 'date-fns';
 import api from "@/app/api";
@@ -22,7 +23,12 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
   const [isCalendarFilterOpen, setIsCalendarFilterOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDueDateOpen, setIsDueDateOpen] = useState(false);
+  const [availablePillars, setAvailablePillars] = useState([]);
+  const [isLoadingPillars, setIsLoadingPillars] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [isPillarOpen, setIsPillarOpen] = useState(false);
+  const [pillarSearch, setPillarSearch] = useState('');
+
   const toDueDateIso = (date) => {
     const d = new Date(date);
     d.setHours(12, 0, 0, 0);
@@ -36,6 +42,30 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  useEffect(() => {
+    if (!isCreateDialogOpen) return;
+
+    let cancelled = false;
+    setIsLoadingPillars(true);
+
+    api.get('/pillars')
+      .then(({ data }) => {
+        if (cancelled) return;
+        setAvailablePillars(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        toast.error(getApiErrorMessage(err, 'Failed to load pillar list'));
+        setAvailablePillars([]);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setIsLoadingPillars(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [isCreateDialogOpen]);
 
   const handleCreateTask = async () => {
     if (!newTask.pillarId || !newTask.dueDate) {
@@ -55,6 +85,8 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
       toast.success(`Task for ${newTask.pillarId} created successfully`);
       setIsCreateDialogOpen(false);
       setIsDueDateOpen(false);
+      setIsPillarOpen(false);
+      setPillarSearch('');
       setNewTask({
         pillarId: '',
         dueDate: toDueDateIso(new Date(Date.now() + 86400000 * 5)),
@@ -133,6 +165,12 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
     { title: 'In Progress', value: stats.inProgress, icon: AlertCircle, color: 'text-orange-600' },
     { title: 'Completed', value: stats.completed, icon: CheckCircle, color: 'text-green-600' },
   ];
+
+  const filteredPillars = availablePillars.filter(p =>
+    p.pillarId.toLowerCase().includes(pillarSearch.toLowerCase()) ||
+    (p.locality ?? '').toLowerCase().includes(pillarSearch.toLowerCase()) ||
+    (p.address ?? '').toLowerCase().includes(pillarSearch.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -367,7 +405,18 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
       </Dialog>
 
       {/* Create Task Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+      <Dialog
+        open={isCreateDialogOpen}
+        onOpenChange={(open) => {
+          setIsCreateDialogOpen(open);
+          if (!open) {
+            setIsPillarOpen(false);
+            setPillarSearch('');
+            setIsDueDateOpen(false);
+            setNewTask((prev) => ({ ...prev, pillarId: '' }));
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Create New Task</DialogTitle>
@@ -378,16 +427,73 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="pillarId">Pillar ID</Label>
-              <Input
-                id="pillarId"
-                value={newTask.pillarId}
-                onChange={(e) => setNewTask({ ...newTask, pillarId: e.target.value })}
-                placeholder="FP-2026-999"
-              />
+
+              <Popover open={isPillarOpen} onOpenChange={setIsPillarOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    id="pillarId"
+                    type="button"
+                    className="border-input flex h-9 w-full items-center justify-between rounded-md border bg-input-background px-3 py-1 text-sm transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  >
+                    <span className={newTask.pillarId ? '' : 'text-muted-foreground'}>
+                      {newTask.pillarId || (isLoadingPillars ? 'Loading pillars…' : 'Select a pillar…')}
+                    </span>
+                    <ChevronDownIcon className="h-4 w-4 opacity-50 shrink-0" />
+                  </button>
+                </PopoverTrigger>
+
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start" style={{ width: 'var(--radix-popover-trigger-width)' }}>
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Search by ID, locality, or address…"
+                      value={pillarSearch}
+                      onValueChange={setPillarSearch}
+                    />
+                    <CommandList
+                      className="max-h-[240px] overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]"
+                      onWheel={(e) => e.stopPropagation()}
+                      onTouchMove={(e) => e.stopPropagation()}
+                    >
+                      {isLoadingPillars ? (
+                        <div className="py-6 text-center text-sm text-muted-foreground">Loading pillars…</div>
+                      ) : (
+                        <>
+                          <CommandEmpty>No pillars found.</CommandEmpty>
+                          <CommandGroup>
+                            {filteredPillars.map(p => (
+                              <CommandItem
+                                key={p.pillarId}
+                                value={p.pillarId}
+                                onSelect={(val) => {
+                                  setNewTask({ ...newTask, pillarId: val });
+                                  setPillarSearch('');
+                                  setIsPillarOpen(false);
+                                }}
+                                className="py-2"
+                              >
+                                <div className="flex flex-col min-w-0">
+                                  <div className="flex items-baseline gap-1.5 min-w-0">
+                                    <span className="text-sm font-medium truncate">{p.pillarId}</span>
+                                  </div>
+                                  {p.address ? (
+                                    <span className="text-[11px] leading-snug text-muted-foreground truncate">{p.address}</span>
+                                  ) : null}
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </>
+                      )}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
+
             <div className="grid gap-2">
               <Label htmlFor="dueDate">Due Date</Label>
               <Popover open={isDueDateOpen} onOpenChange={setIsDueDateOpen}>
+
                 <PopoverTrigger asChild>
                   <button
                     id="dueDate"
@@ -395,7 +501,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
                     className="border-input flex h-9 w-full min-w-0 items-center justify-between rounded-md border bg-input-background px-3 py-1 text-base transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm"
                   >
                     <span className={newTask.dueDate ? '' : 'text-muted-foreground'}>
-                      {newTask.dueDate ? format(new Date(newTask.dueDate), 'dd MMM yyyy') : 'Select due date'}
+                      {newTask.dueDate ? format(new Date(newTask.dueDate), 'dd MMM yyyy') : 'Select date'}
                     </span>
                     <CalendarDays className="h-4 w-4 opacity-60" />
                   </button>

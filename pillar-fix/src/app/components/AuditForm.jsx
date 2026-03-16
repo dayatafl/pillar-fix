@@ -156,6 +156,7 @@ export function AuditForm({ task, onBack, onSubmit }) {
       onSubmit({
         id: data.photo_id, taskId: task.id,
         pillarId: task.pillarId, location: task.location, address: task.address,
+        dueDate: task.dueDate,
         coordinates: currentCoordinates,
         images: [
           { side: 'front', imageUrl: images.front }, { side: 'right', imageUrl: images.right },
@@ -332,7 +333,21 @@ export function AuditForm({ task, onBack, onSubmit }) {
               <div><Label className="text-gray-600 block mb-1.5">Pillar ID</Label><Input value={task.pillarId} readOnly className="bg-gray-50" /></div>
               <div><Label className="text-gray-600 block mb-1.5">Address</Label><Input value={task.address} readOnly className="bg-gray-50" /></div>
               <div><Label className="text-gray-600 block mb-1.5">Locality</Label><Input value={task.locality} readOnly className="bg-gray-50" /></div>
-              <div><Label className="text-gray-600 block mb-1.5">Due Date</Label><Input value={task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'} readOnly className="bg-gray-50" /></div>
+              <div>
+                <Label className="text-gray-600 block mb-1.5">Due Date</Label>
+                <div
+                  className={`flex items-center justify-between rounded-lg border px-3 py-2 ${
+                    task.dueDate ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'
+                  }`}
+                >
+                  <span className={`text-sm font-semibold ${task.dueDate ? 'text-red-900' : 'text-gray-700'}`}>
+                    {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}
+                  </span>
+                  {task.dueDate && (
+                    <Badge className="bg-red-600 text-white hover:bg-red-600">Due</Badge>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
