@@ -29,6 +29,7 @@ async function geocodeLocality(locality) {
 export function Analytics({ maintenanceItems, tasks = [] }) {
   const mapRef = useRef(null);
   const mapContainerRef = useRef(null);
+  const hotspotCirclesRef = useRef(new Map());
   const [isMobile, setIsMobile] = useState(false);
 
   // Geocoded coordinates keyed by locality name
@@ -125,6 +126,7 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
   // Re-draw circles whenever hotspotAreas or localityCoords updates
   useEffect(() => {
     if (!mapRef.current) return;
+    hotspotCirclesRef.current.clear();
     mapRef.current.eachLayer((layer) => {
       if (layer instanceof L.Circle) mapRef.current?.removeLayer(layer);
     });
@@ -143,8 +145,24 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
           <p style="font-size:12px;margin:4px 0;">Avg Cost: RM ${area.averageCost.toLocaleString()}</p>
         </div>
       `);
+      hotspotCirclesRef.current.set(area.locality, circle);
     });
   }, [hotspotAreas, localityCoords]);
+
+  const handleHotspotClick = (area) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const targetZoom = Math.max(map.getZoom(), 15);
+    map.flyTo([area.coordinates.lat, area.coordinates.lng], targetZoom, { duration: 0.8 });
+
+    const circle = hotspotCirclesRef.current.get(area.locality);
+    if (circle) window.setTimeout(() => circle.openPopup(), 250);
+
+    if (isMobile && mapContainerRef.current) {
+      mapContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   const totalCost = maintenanceItems.reduce((sum, item) => sum + item.estimatedCost, 0);
   const avgCost = maintenanceItems.length > 0 ? totalCost / maintenanceItems.length : 0;
@@ -261,26 +279,32 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
       <Card>
         <CardHeader className="pb-2"><CardTitle>Pillar Hotspot Areas</CardTitle></CardHeader>
         <CardContent>
-          <div ref={mapContainerRef} className="w-full h-[500px] relative z-0 rounded-lg mb-4" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {hotspotAreas.map((area, index) => (
-              <div key={index} className="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="font-semibold">{area.locality}</h4>
-                    <p className="text-sm text-gray-600 mt-1">{area.issueCount} total pillars</p>
-                  </div>
-                  <AlertTriangle className={`h-5 w-5 ${area.criticalCount > 8 ? 'text-red-600' : area.criticalCount > 5 ? 'text-orange-600' : 'text-yellow-600'}`} />
-                </div>
-                <div className="mt-3 space-y-1 text-xs text-gray-600">
-                  <p>Critical: {area.criticalCount}</p>
-                  <p>Avg Cost: RM {area.averageCost.toLocaleString()}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+	          <div ref={mapContainerRef} className="w-full h-[500px] relative z-0 rounded-lg mb-4" />
+	          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+	            {hotspotAreas.map((area, index) => (
+	              <button
+	                key={index}
+	                type="button"
+	                onClick={() => handleHotspotClick(area)}
+	                className="p-4 border rounded-lg hover:bg-gray-50 transition-colors text-left cursor-pointer"
+	                title="Zoom map to this locality"
+	              >
+	                <div className="flex items-start justify-between">
+	                  <div>
+	                    <h4 className="font-semibold">{area.locality}</h4>
+	                    <p className="text-sm text-gray-600 mt-1">{area.issueCount} total pillars</p>
+	                  </div>
+	                  <AlertTriangle className={`h-5 w-5 ${area.criticalCount > 8 ? 'text-red-600' : area.criticalCount > 5 ? 'text-orange-600' : 'text-yellow-600'}`} />
+	                </div>
+	                <div className="mt-3 space-y-1 text-xs text-gray-600">
+	                  <p>Critical: {area.criticalCount}</p>
+	                  <p>Avg Cost: RM {area.averageCost.toLocaleString()}</p>
+	                </div>
+	              </button>
+	            ))}
+	          </div>
+	        </CardContent>
+	      </Card>
     </div>
   );
 }
