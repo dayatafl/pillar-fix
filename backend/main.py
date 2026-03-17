@@ -105,7 +105,7 @@ class TaskMaintenance(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Analytics output schemas (LangChain structured output)
+# Analytics output schemas
 # ---------------------------------------------------------------------------
 
 class MonthProjection(BaseModel):
@@ -130,12 +130,37 @@ class FaultTypeInsight(BaseModel):
     recommendation: str    = Field(description="Specific actionable maintenance recommendation")
 
 
+class LocalityCostBreakdown(BaseModel):
+    locality: str         = Field(description="Area or locality name")
+    total_cost: float     = Field(description="Total maintenance cost in RM for this locality")
+    task_count: int       = Field(description="Number of approved tasks in this locality")
+    avg_cost: float       = Field(description="Average cost per task in RM for this locality")
+    cost_share: float     = Field(description="Percentage share of total portfolio cost (0-100)")
+    assessment: str       = Field(description="1 sentence assessment of cost efficiency or concern for this area")
+
+
+class CostAnalysis(BaseModel):
+    total_spent: float          = Field(description="Total RM spent on approved maintenance tasks")
+    avg_cost_per_task: float    = Field(description="Average cost per maintenance task in RM")
+    most_expensive_locality: str = Field(description="Locality with highest total maintenance cost")
+    cost_trend: str             = Field(description="Rising | Stable | Declining — based on monthly cost data")
+    cost_trend_explanation: str = Field(description="1-2 sentences explaining the cost trend with reference to actual monthly figures")
+    locality_breakdown: list[LocalityCostBreakdown] = Field(
+        description="Cost breakdown per locality, sorted by total_cost descending. If no locality data, return one entry with locality=Unknown."
+    )
+    cost_efficiency_rating: str = Field(description="Poor | Fair | Good | Excellent — overall cost management rating with brief justification in parentheses")
+    six_month_projected_total: float = Field(description="Sum of all projected costs over the 6-month window in RM")
+    six_month_preventive_total: float = Field(description="Sum of all preventive costs over the 6-month window in RM")
+    cost_summary: str           = Field(description="2-3 sentence narrative summarising cost health, biggest cost drivers, and financial outlook")
+
+
 class AnalyticsInsightsReport(BaseModel):
-    insight: str               = Field(description="2-3 sentence executive summary of maintenance health and cost trends")
+    insight: str               = Field(description="2-3 sentence executive summary of overall maintenance health")
     risk_level: str            = Field(description="Overall portfolio risk: Low | Medium | High | Critical")
-    potential_savings: float   = Field(description="Total RM savings achievable over 6 months by adopting preventive maintenance")
-    cost_projection: list[MonthProjection]      = Field(description="Exactly 6 monthly cost projections starting from the next calendar month")
-    severity_insights: list[SeverityInsight]    = Field(description="One entry per severity level that has at least 1 pillar")
+    potential_savings: float   = Field(description="Total RM savings over 6 months by adopting preventive maintenance")
+    cost_projection: list[MonthProjection]      = Field(description="Exactly 6 monthly cost projections starting from next_projection_month")
+    cost_analysis: CostAnalysis                 = Field(description="Deep cost analysis covering spend, trends, locality breakdown, and efficiency")
+    severity_insights: list[SeverityInsight]    = Field(description="One entry per severity level present in the data")
     severity_summary: str                       = Field(description="1-2 sentence overall severity portfolio assessment")
     fault_type_insights: list[FaultTypeInsight] = Field(description="One entry per fault type sorted by occurrences descending")
     fault_summary: str         = Field(description="1-2 sentence summary of dominant fault patterns")
@@ -143,53 +168,91 @@ class AnalyticsInsightsReport(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Analytics LangChain chain
+# LangChain chain with Gemini
 # ---------------------------------------------------------------------------
 
 _SYSTEM_INSTRUCTION = """You are a senior infrastructure analytics specialist for a Malaysian utility
 company managing roadside utility pillars (concrete/metal posts).
 
-You MUST populate ALL 9 fields of the AnalyticsInsightsReport — never omit any field.
+You MUST populate ALL 10 fields of the AnalyticsInsightsReport — never omit any field.
 If data is sparse, use reasonable estimates and note it in the analysis text.
 
 COST PROJECTION (cost_projection) — required, exactly 6 entries
-- Start from next_projection_month, produce 6 consecutive months.
-- Base projected on avg_cost_per_task_rm x estimated monthly volume.
-  Use monthly_costs_this_year as baseline if available; otherwise estimate
-  monthly volume as max(1, total_approved_tasks / months_elapsed_this_year).
-- preventive = projected x 0.65 (35% saving from preventive maintenance).
-- If total_approved_tasks is 0, use RM 5000/month as a conservative placeholder.
+IMPORTANT: The stats already contain a pre-computed "projection_months" list with 6 entries,
+each having: month, projected, preventive. These values already incorporate Malaysian seasonal
+factors and observed cost trends. You MUST copy these values directly into cost_projection —
+do NOT recalculate or invent new numbers.
+Example: if projection_months = [{{"month":"Apr","projected":5200,"preventive":3380}}, ...]
+then cost_projection must be exactly those 6 entries.
+
+COST ANALYSIS (cost_analysis) — required, full deep analysis
+- total_spent: use total_cost_rm from stats.
+- avg_cost_per_task: use avg_cost_per_task_rm from stats.
+- potential_savings: use potential_savings_6mo from stats.
+- most_expensive_locality: locality with highest total_cost in locality_breakdown.
+  If locality_breakdown is empty, write "Insufficient data".
+- cost_trend: compare monthly_costs_this_year values chronologically.
+  Rising = costs clearly increasing month over month.
+  Declining = costs clearly decreasing.
+  Stable = roughly flat OR only 1 month of data available.
+  Use trend_multiplier hint: > 1.03 = Rising, < 0.97 = Declining, else Stable.
+- cost_trend_explanation: reference actual month names and RM figures from monthly_costs_this_year.
+  If only 1 month exists, say so explicitly and note trend cannot yet be determined.
+- locality_breakdown: one entry per locality in locality_breakdown dict.
+  total_cost = locality_breakdown[loc].total_cost
+  task_count = locality_breakdown[loc].count
+  avg_cost = total_cost / task_count
+  cost_share = (total_cost / total_cost_rm) x 100
+  assessment: 1 sentence — is avg_cost above/below portfolio average?
+  Any critical faults driving cost?
+  If locality_breakdown is empty: one entry locality=Unknown, zeros,
+  assessment="No locality data recorded yet".
+- cost_efficiency_rating: rate overall cost management.
+  Excellent = avg below RM 3000/task AND declining trend.
+  Good = avg RM 3000-6000/task (Malaysian benchmark range).
+  Fair = avg RM 6000-10000/task or rising trend.
+  Poor = avg above RM 10000/task or all reactive.
+  Include justification in parentheses.
+- six_month_projected_total: use projected_6mo_total from stats.
+- six_month_preventive_total: use preventive_6mo_total from stats.
+- cost_summary: 2-3 sentences on total spend, biggest cost driver, and financial outlook.
+  IMPORTANT: Always mention the saving_rate_pct and saving_rate_source from stats in the
+  cost_summary. e.g. "The projected saving rate of X% is [derived from Y completed tasks /
+  based on industry default]." This tells managers how reliable the saving estimate is.
 
 SEVERITY INSIGHTS (severity_insights) — required, one entry per level in severity_distribution
-- If severity_distribution is empty, produce one entry:
-  level=Unknown, count=0, percentage=0.0,
-  analysis=No severity data recorded yet, urgency=Assess on next inspection.
-- percentage = (count / total_approved_tasks) x 100, rounded to 1 decimal.
+- If empty, produce one placeholder entry.
+- percentage = (count / total_approved_tasks) x 100, 1 decimal.
 - Urgency: Critical=Within 24-48 hours, High=Within 1 week,
            Medium=Within 1 month, Low=Scheduled next quarter.
 
 FAULT TYPE INSIGHTS (fault_type_insights) — required, one entry per fault in fault_type_frequency
-- If fault_type_frequency is empty, produce one placeholder entry.
+- If empty, produce one placeholder entry.
 - Sort by occurrences descending.
 - risk_contribution: High = avg_confidence > 0.85 AND occurrences >= 3;
                      Medium = occurrences >= 2; Low = otherwise.
 - recommendation must name a specific maintenance action.
 
 RECOMMENDATIONS (recommendations) — required, exactly 3 strings.
+- At least one must reference a cost-saving action with an RM figure.
+- At least one must reference a specific fault type.
+- At least one must reference a specific locality or severity level.
+
 severity_summary and fault_summary — required, always non-empty strings.
-All RM figures must be realistic for Malaysian infrastructure context."""
+All RM figures must be realistic for Malaysian infrastructure (typical range RM 2000-15000/task)."""
 
 
 def _build_analytics_chain():
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
         google_api_key=os.environ.get("GEMINI_API_KEY"),
+        max_output_tokens=6000,
         temperature=0,
+        convert_system_message_to_human=True,
     )
 
     structured_llm = llm.with_structured_output(AnalyticsInsightsReport)
 
-    # System message goes in the prompt template (not the constructor)
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -197,14 +260,13 @@ def _build_analytics_chain():
         ),
         (
             "human",
-            "Aggregated maintenance statistics:\n\n{stats}\n\nGenerate the complete analytics report. All 9 fields are required.",
+            "Aggregated maintenance statistics:\n\n{stats}\n\nGenerate the complete analytics report. All 10 fields are required.",
         ),
     ])
 
     return prompt | structured_llm
 
 
-# Built once at module load — reused on every request
 _analytics_chain = _build_analytics_chain()
 
 
@@ -242,6 +304,7 @@ def _aggregate_stats(db: Session) -> dict:
         for ft, confs in fault_confidence.items()
     }
 
+    # Locality breakdown with cost detail
     locality_stats: dict[str, dict] = {}
     all_joined = (
         db.query(Task, Pillar)
@@ -258,10 +321,15 @@ def _aggregate_stats(db: Session) -> dict:
         if task.severity_validation == "Critical":
             locality_stats[loc]["critical"] += 1
 
+    # ── Monthly trends (real DB data + mock for missing prior months) ──────────
     now        = datetime.utcnow()
     year_start = datetime(now.year, 1, 1)
     monthly_tasks = db.query(Task).filter(Task.created_date >= year_start).all()
 
+    MONTH_ORDER = ["Jan","Feb","Mar","Apr","May","Jun",
+                   "Jul","Aug","Sep","Oct","Nov","Dec"]
+
+    # Real monthly data from DB
     monthly_counts: dict[str, int]   = {}
     monthly_costs:  dict[str, float] = {}
     for t in monthly_tasks:
@@ -269,6 +337,32 @@ def _aggregate_stats(db: Session) -> dict:
             key = t.created_date.strftime("%b")
             monthly_counts[key] = monthly_counts.get(key, 0) + 1
             monthly_costs[key]  = monthly_costs.get(key, 0) + (t.cost_estimation or 0)
+
+    # ── Mock data for months with no real tasks yet ──────────────────────────
+    # Fills in the months from Jan up to (but not including) the current month
+    # so the chart always has a full historical line to anchor the projection.
+    # Uses avg_cost as the base with Malaysian seasonal variation and mild noise.
+    # REMOVE THIS BLOCK once you have 6+ months of real task data.
+    import random
+    random.seed(42)  # fixed seed so mock data is stable across reloads
+
+    SEASONAL_MOCK = {
+        "Jan": 0.82, "Feb": 0.88, "Mar": 0.95, "Apr": 1.05,
+        "May": 1.12, "Jun": 1.18, "Jul": 1.10, "Aug": 1.03,
+        "Sep": 0.98, "Oct": 0.93, "Nov": 0.84, "Dec": 0.78,
+    }
+
+    mock_base = avg_cost if avg_cost > 0 else 5000.0
+    for m_idx in range(now.month - 1):   # all months before current month
+        month_abbr = MONTH_ORDER[m_idx]
+        if month_abbr not in monthly_costs:   # only fill if no real data exists
+            seasonal_factor = SEASONAL_MOCK[month_abbr]
+            noise           = random.uniform(0.88, 1.12)
+            mock_cost       = round(mock_base * seasonal_factor * noise, 2)
+            mock_count      = max(1, round(mock_base / 5000))  # approx task count
+            monthly_costs[month_abbr]  = mock_cost
+            monthly_counts[month_abbr] = mock_count
+    # ── End mock data block ──────────────────────────────────────────────────
 
     avg_confidence = (
         sum(d.confidence_level for d in all_detections) / len(all_detections)
@@ -280,9 +374,165 @@ def _aggregate_stats(db: Session) -> dict:
         else datetime(now.year, now.month + 1, 1)
     ).strftime("%b")
 
+    # Months elapsed so far this year (min 1 to avoid division by zero)
+    months_elapsed = max(1, now.month)
+
+    # ── Option 3: Derive saving rate from your own completed task data ─────────
+    #
+    # Logic:
+    #   - "Preventive proxy" = completed tasks with Low or Medium severity.
+    #     These were caught early with minimal damage — similar to what a
+    #     scheduled preventive inspection would find and fix.
+    #   - "Reactive proxy" = completed tasks with High or Critical severity.
+    #     These escalated before being caught — the expensive reactive pattern.
+    #   - saving_rate = 1 - (avg_preventive_cost / avg_reactive_cost)
+    #     e.g. if preventive avg = RM 3000 and reactive avg = RM 7000,
+    #     saving_rate = 1 - (3000/7000) = 0.571  → 57% saving
+    #
+    # Confidence blending:
+    #   With few data points the ratio can be extreme (one lucky cheap task
+    #   vs one expensive one). We blend with the industry default (0.35)
+    #   using a confidence weight that grows with sample size.
+    #   At 0 completed tasks  → 100% industry default (0.35)
+    #   At 6 completed tasks  → 50/50 blend
+    #   At 20+ completed tasks → 95%+ your own data
+    #
+    INDUSTRY_DEFAULT_SAVING_RATE = 0.35
+    MIN_TASKS_FOR_FULL_CONFIDENCE = 20  # tune this as your dataset grows
+
+    completed_tasks = [t for t in approved_tasks if t.task_status == "Completed"
+                       and t.cost_estimation is not None]
+
+    preventive_proxy = [t for t in completed_tasks
+                        if t.severity_validation in ("Low", "Medium")]
+    reactive_proxy   = [t for t in completed_tasks
+                        if t.severity_validation in ("High", "Critical")]
+
+    avg_preventive_cost = (
+        sum(t.cost_estimation for t in preventive_proxy) / len(preventive_proxy)
+        if preventive_proxy else None
+    )
+    avg_reactive_cost = (
+        sum(t.cost_estimation for t in reactive_proxy) / len(reactive_proxy)
+        if reactive_proxy else None
+    )
+
+    # Can only compute a real ratio if we have both proxy groups
+    if avg_preventive_cost is not None and avg_reactive_cost is not None and avg_reactive_cost > 0:
+        raw_saving_rate = 1.0 - (avg_preventive_cost / avg_reactive_cost)
+        # Clamp to a sensible range (0% to 70%) — outliers shouldn't produce
+        # negative savings or implausibly high figures
+        raw_saving_rate = max(0.0, min(0.70, raw_saving_rate))
+
+        # Confidence weight: how much to trust our own data vs industry default
+        n_completed = len(completed_tasks)
+        confidence  = min(1.0, n_completed / MIN_TASKS_FOR_FULL_CONFIDENCE)
+        saving_rate = (confidence * raw_saving_rate) + ((1 - confidence) * INDUSTRY_DEFAULT_SAVING_RATE)
+        saving_rate_source = (
+            f"derived ({n_completed} completed tasks, "
+            f"{round(confidence * 100)}% confidence, "
+            f"blended with {round((1-confidence)*100)}% industry default)"
+        )
+    else:
+        # Not enough completed tasks in both groups — fall back to industry default
+        saving_rate = INDUSTRY_DEFAULT_SAVING_RATE
+        n_completed = len(completed_tasks)
+        if n_completed == 0:
+            saving_rate_source = "industry default (no completed tasks yet)"
+        elif not preventive_proxy:
+            saving_rate_source = f"industry default (no Low/Medium completed tasks yet — {n_completed} High/Critical only)"
+        elif not reactive_proxy:
+            saving_rate_source = f"industry default (no High/Critical completed tasks yet — {n_completed} Low/Medium only)"
+        else:
+            saving_rate_source = "industry default (fallback)"
+
+    # ── Pre-compute 12-month projection with derived saving rate ────────────
+    # Malaysian seasonal factors: SW monsoon (May-Sep) drives more field work;
+    # NE monsoon (Nov-Jan) causes access delays and deferred tasks.
+    SEASONAL = {
+        "Jan": 0.85, "Feb": 0.90, "Mar": 1.00, "Apr": 1.05,
+        "May": 1.10, "Jun": 1.15, "Jul": 1.10, "Aug": 1.05,
+        "Sep": 1.00, "Oct": 0.95, "Nov": 0.85, "Dec": 0.80,
+    }
+
+    # Use real+mock monthly data to compute the baseline avg
+    if monthly_costs:
+        observed_monthly_avg = sum(monthly_costs.values()) / len(monthly_costs)
+    else:
+        observed_monthly_avg = avg_cost if avg_cost > 0 else 5000.0
+
+    # Trend: compute from the chronological monthly cost sequence
+    month_keys = [m for m in MONTH_ORDER if m in monthly_costs]
+    if len(month_keys) >= 2:
+        first_cost = monthly_costs[month_keys[0]]
+        last_cost  = monthly_costs[month_keys[-1]]
+        raw_growth = (last_cost / first_cost) ** (1 / max(len(month_keys) - 1, 1)) if first_cost > 0 else 1.0
+        trend_multiplier = max(0.90, min(1.10, raw_growth))
+    else:
+        trend_multiplier = 1.02
+
+    # ── 12-month forward projection starting from next_month ────────────────
+    start_month_idx = MONTH_ORDER.index(next_month)
+    projection_months = []
+    for i in range(12):
+        month_abbr = MONTH_ORDER[(start_month_idx + i) % 12]
+        seasonal   = SEASONAL[month_abbr]
+        growth     = trend_multiplier ** (i + 1)
+        projected  = round(observed_monthly_avg * seasonal * growth, 2)
+        preventive = round(projected * (1 - saving_rate), 2)
+        projection_months.append({
+            "month":      month_abbr,
+            "projected":  projected,
+            "preventive": preventive,
+        })
+
+    projected_total       = round(sum(m["projected"]  for m in projection_months), 2)
+    preventive_total      = round(sum(m["preventive"] for m in projection_months), 2)
+    potential_savings_12mo = round(projected_total - preventive_total, 2)
+
+    # ── Combined chart series: historical actual + 12-month projection ───────
+    # Frontend renders this as a single continuous line chart.
+    # Historical months have "actual" filled, projected=None.
+    # Projected months have "projected"+"preventive" filled, actual=None.
+    # The month where they meet is the current month — it carries both values
+    # so the lines connect visually without a gap.
+    chart_series = []
+
+    # Historical months (Jan → current month inclusive)
+    for m_idx in range(now.month):
+        month_abbr   = MONTH_ORDER[m_idx]
+        actual_cost  = monthly_costs.get(month_abbr)
+        is_current   = (m_idx == now.month - 1)
+        entry = {
+            "month":      month_abbr,
+            "actual":     round(actual_cost, 2) if actual_cost is not None else None,
+            "projected":  None,
+            "preventive": None,
+            "is_mock":    month_abbr not in {
+                              t.created_date.strftime("%b")
+                              for t in monthly_tasks if t.created_date
+                          },
+        }
+        if is_current and projection_months:
+            # Anchor: carry forward the first projected value so lines connect
+            entry["projected"]  = projection_months[0]["projected"]
+            entry["preventive"] = projection_months[0]["preventive"]
+        chart_series.append(entry)
+
+    # Projected months (next_month → +11 months)
+    for proj in projection_months:
+        chart_series.append({
+            "month":      proj["month"],
+            "actual":     None,
+            "projected":  proj["projected"],
+            "preventive": proj["preventive"],
+            "is_mock":    False,
+        })
+
     return {
         "snapshot_date":                 now.strftime("%Y-%m-%d"),
         "next_projection_month":         next_month,
+        "months_elapsed_this_year":      months_elapsed,
         "total_approved_tasks":          len(approved_tasks),
         "total_cost_rm":                 round(total_cost, 2),
         "avg_cost_per_task_rm":          round(avg_cost, 2),
@@ -297,6 +547,23 @@ def _aggregate_stats(db: Session) -> dict:
         "monthly_costs_this_year":       monthly_costs,
         "ai_avg_detection_confidence":   round(avg_confidence, 3),
         "total_detections":              len(all_detections),
+        # Pre-computed projection — AI uses these directly, no more flat lines
+        "projection_months":             projection_months,   # 12 forward months
+        "projected_12mo_total":          projected_total,
+        "preventive_12mo_total":         preventive_total,
+        "potential_savings_12mo":        potential_savings_12mo,
+        "potential_savings_6mo":         round(sum(m["projected"] - m["preventive"] for m in projection_months[:6]), 2),
+        "chart_series":                  chart_series,        # historical + projected combined
+        "observed_monthly_avg_cost":     round(observed_monthly_avg, 2),
+        "trend_multiplier":              round(trend_multiplier, 4),
+        # Saving rate metadata — passed through to frontend for transparency
+        "saving_rate":                   round(saving_rate, 4),
+        "saving_rate_pct":               round(saving_rate * 100, 1),
+        "saving_rate_source":            saving_rate_source,
+        "avg_preventive_proxy_cost":     round(avg_preventive_cost, 2) if avg_preventive_cost else None,
+        "avg_reactive_proxy_cost":       round(avg_reactive_cost, 2)   if avg_reactive_cost   else None,
+        "preventive_proxy_count":        len(preventive_proxy),
+        "reactive_proxy_count":          len(reactive_proxy),
     }
 
 
@@ -336,14 +603,9 @@ async def login_user(login: LoginRequest, db: db_dependency):
     return {
         "exists": True,
         "user": {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "username": user.username,
-            "employeeId": user.employeeId,
-            "role": user.role,
-            "isActive": user.isActive,
-            "locality": user.locality,
+            "id": user.id, "name": user.name, "email": user.email,
+            "username": user.username, "employeeId": user.employeeId,
+            "role": user.role, "isActive": user.isActive, "locality": user.locality,
         },
     }
 
@@ -587,7 +849,6 @@ async def submit_task(task_id: int, data: TaskSubmit, db: db_dependency):
         upload_image_to_gcs(img, f"audit/task_{task_id}_{sides[i]}_{uuid.uuid4().hex[:8]}.jpg")
         for i, img in enumerate(raw)
     ]
-
     task.image_1 = urls[0]; task.image_2 = urls[1]
     task.image_3 = urls[2]; task.image_4 = urls[3]
     task.user_current_location = data.user_current_location
@@ -667,13 +928,13 @@ async def validate_task(task_id: int, data: TaskValidation, db: db_dependency):
     task = db.query(Task).filter(Task.task_id == task_id).first()
     if not task:
         raise HTTPException(404, "Task not found")
-    task.validation_status  = data.validation_status
+    task.validation_status   = data.validation_status
     task.severity_validation = data.severity_validation
-    task.cost_estimation    = data.cost_estimation
-    task.remarks            = data.remarks
-    task.validation_by      = data.validation_by
-    task.task_status        = "Validated"
-    task.updated_date       = datetime.utcnow()
+    task.cost_estimation     = data.cost_estimation
+    task.remarks             = data.remarks
+    task.validation_by       = data.validation_by
+    task.task_status         = "Validated"
+    task.updated_date        = datetime.utcnow()
     db.commit(); db.refresh(task)
     return {"message": "Task validated"}
 
@@ -795,7 +1056,7 @@ async def get_maintenance(db: db_dependency):
     )
     result = []
     for r in rows:
-        boxes = db.query(Detection).filter(Detection.task_id == r.task_id).all()
+        boxes  = db.query(Detection).filter(Detection.task_id == r.task_id).all()
         faults = list(set(b.faulty_type for b in boxes))
         sides  = ["front", "right", "back", "left"]
         imgs   = sign_image_list([r.image_1, r.image_2, r.image_3, r.image_4])
@@ -831,13 +1092,212 @@ async def get_maintenance(db: db_dependency):
 # Analytics insights
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# GET /analytics/chart-data  — fast, no AI, returns Jan-Dec cost history
+# Called on page mount so the chart renders immediately without waiting for AI.
+# ---------------------------------------------------------------------------
+
+@app.get("/analytics/chart-data")
+async def get_analytics_chart_data(db: db_dependency):
+    """
+    Returns a fixed Jan-Dec array with actual monthly costs from the DB
+    (plus mock estimates for months with no tasks yet).
+    No AI call — responds instantly.
+
+    Each entry: { month, actual, is_mock }
+    projected/preventive are null until the AI insights endpoint is called.
+    """
+    import random
+    random.seed(42)
+
+    MONTH_ORDER = ["Jan","Feb","Mar","Apr","May","Jun",
+                   "Jul","Aug","Sep","Oct","Nov","Dec"]
+    SEASONAL_MOCK = {
+        "Jan": 0.82, "Feb": 0.88, "Mar": 0.95, "Apr": 1.05,
+        "May": 1.12, "Jun": 1.18, "Jul": 1.10, "Aug": 1.03,
+        "Sep": 0.98, "Oct": 0.93, "Nov": 0.84, "Dec": 0.78,
+    }
+
+    now        = datetime.utcnow()
+    year_start = datetime(now.year, 1, 1)
+
+    # Real monthly costs from DB (all approved tasks this year)
+    monthly_tasks = db.query(Task).filter(Task.created_date >= year_start).all()
+    real_months: set[str] = set()
+    monthly_costs: dict[str, float] = {}
+    for t in monthly_tasks:
+        if t.created_date:
+            key = t.created_date.strftime("%b")
+            monthly_costs[key] = monthly_costs.get(key, 0) + (t.cost_estimation or 0)
+            real_months.add(key)
+
+    # Baseline for mock: avg cost across approved tasks, fallback RM 5000
+    approved_tasks = db.query(Task).filter(Task.validation_status == "Approved").all()
+    total_cost = sum(t.cost_estimation or 0 for t in approved_tasks)
+    avg_cost   = (total_cost / len(approved_tasks)) if approved_tasks else 5000.0
+    mock_base  = avg_cost if avg_cost > 0 else 5000.0
+
+    # Build fixed Jan-Dec array
+    chart = []
+    for idx, month_abbr in enumerate(MONTH_ORDER):
+        month_num = idx + 1  # 1=Jan … 12=Dec
+
+        if month_num < now.month:
+            # Past month — real data if available, else mock estimate
+            if month_abbr in monthly_costs:
+                actual  = round(monthly_costs[month_abbr], 2)
+                is_mock = False
+            else:
+                seasonal = SEASONAL_MOCK[month_abbr]
+                noise    = random.uniform(0.88, 1.12)
+                actual   = round(mock_base * seasonal * noise, 2)
+                is_mock  = True
+        elif month_num == now.month:
+            # Current month — use real data if any tasks exist, else mock
+            if month_abbr in monthly_costs:
+                actual  = round(monthly_costs[month_abbr], 2)
+                is_mock = False
+            else:
+                seasonal = SEASONAL_MOCK[month_abbr]
+                actual   = round(mock_base * seasonal, 2)
+                is_mock  = True
+        else:
+            # Future month — no actual data yet
+            actual  = None
+            is_mock = False
+
+        chart.append({
+            "month":      month_abbr,
+            "actual":     actual,
+            "projected":  None,   # filled in by /analytics/insights when AI runs
+            "preventive": None,   # filled in by /analytics/insights when AI runs
+            "is_mock":    is_mock,
+            "is_current": month_num == now.month,
+            "is_future":  month_num > now.month,
+        })
+
+    return {
+        "chart": chart,
+        "current_month": now.strftime("%b"),
+        "year": now.year,
+        "has_mock": any(e["is_mock"] for e in chart),
+    }
+
+
+# ---------------------------------------------------------------------------
+# In-memory cache for analytics insights
+# Regenerated only when ?refresh=true is passed (triggered by the Refresh button).
+# On every normal page load the cached result is returned instantly.
+# ---------------------------------------------------------------------------
+_insights_cache: dict | None = None
+
+
+def _build_insights_response(stats: dict, report: AnalyticsInsightsReport) -> dict:
+    """
+    Assemble the final response dict from stats + AI report.
+
+    Produces a fixed Jan-Dec chart by merging the 12-month forward projection
+    into the correct month slots of the full-year array.
+    Slots before current month keep actual/mock costs.
+    Slots from current month onward get projected + preventive values.
+    The current month carries both actual and projected so lines connect.
+    """
+    MONTH_ORDER = ["Jan","Feb","Mar","Apr","May","Jun",
+                   "Jul","Aug","Sep","Oct","Nov","Dec"]
+
+    now         = datetime.utcnow()
+    current_idx = now.month - 1   # 0-based index of current month
+
+    # Build projected/preventive lookup keyed by month abbreviation.
+    # The 12-month projection starts at next_month; some months wrap to next year
+    # but we only care about months that fall within Jan-Dec of THIS year.
+    proj_lookup: dict[str, dict] = {}
+    for entry in stats.get("projection_months", []):
+        proj_lookup[entry["month"]] = entry
+
+    # Build fixed Jan-Dec array
+    monthly_costs = stats.get("monthly_costs_this_year", {})
+    real_months   = set(monthly_costs.keys())
+
+    import random
+    random.seed(42)
+    SEASONAL_MOCK = {
+        "Jan": 0.82, "Feb": 0.88, "Mar": 0.95, "Apr": 1.05,
+        "May": 1.12, "Jun": 1.18, "Jul": 1.10, "Aug": 1.03,
+        "Sep": 0.98, "Oct": 0.93, "Nov": 0.84, "Dec": 0.78,
+    }
+    mock_base = stats.get("observed_monthly_avg_cost", 5000.0)
+
+    chart_series = []
+    for idx, month_abbr in enumerate(MONTH_ORDER):
+        month_num = idx + 1
+
+        # Actual cost for past + current months
+        if month_num <= now.month:
+            if month_abbr in monthly_costs:
+                actual  = round(monthly_costs[month_abbr], 2)
+                is_mock = False
+            else:
+                seasonal = SEASONAL_MOCK[month_abbr]
+                noise    = random.uniform(0.88, 1.12)
+                actual   = round(mock_base * seasonal * noise, 2)
+                is_mock  = True
+        else:
+            actual  = None
+            is_mock = False
+
+        # Projected + preventive for current month onward (anchor + forward)
+        proj_entry = proj_lookup.get(month_abbr)
+        if month_num >= now.month and proj_entry:
+            projected  = proj_entry["projected"]
+            preventive = proj_entry["preventive"]
+        else:
+            projected  = None
+            preventive = None
+
+        chart_series.append({
+            "month":      month_abbr,
+            "actual":     actual,
+            "projected":  projected,
+            "preventive": preventive,
+            "is_mock":    is_mock,
+            "is_current": month_num == now.month,
+            "is_future":  month_num > now.month,
+        })
+
+    potential_savings = stats.get("potential_savings_12mo",
+                        stats.get("potential_savings_6mo", report.potential_savings))
+    return {
+        "stats":             stats,
+        "insight":           report.insight,
+        "riskLevel":         report.risk_level,
+        "potentialSavings":  potential_savings,
+        "costProjection":    chart_series,
+        "costAnalysis":      report.cost_analysis.model_dump(),
+        "severityInsights":  [s.model_dump() for s in report.severity_insights],
+        "severitySummary":   report.severity_summary,
+        "faultTypeInsights": [f.model_dump() for f in report.fault_type_insights],
+        "faultSummary":      report.fault_summary,
+        "recommendations":   report.recommendations,
+    }
+
+
 @app.get("/analytics/insights")
-async def get_analytics_insights(db: db_dependency):
+async def get_analytics_insights(db: db_dependency, refresh: bool = False):
     """
-    AI-generated report via LangChain + Gemini structured output.
-    Covers: executive insight, risk level, 6-month cost projection,
-    per-severity analysis, per-fault-type analysis, recommendations.
+    Returns the cached AI analytics report on normal page loads.
+    Pass ?refresh=true to force a fresh Gemini API call and update the cache.
+
+    refresh=false (default) → return cached result instantly, no API call
+    refresh=true            → re-aggregate stats + call Gemini, update cache
     """
+    global _insights_cache
+
+    # Serve cache if available and refresh not requested
+    if _insights_cache is not None and not refresh:
+        return _insights_cache
+
+    # Generate fresh report
     stats = _aggregate_stats(db)
     try:
         report: AnalyticsInsightsReport = await _analytics_chain.ainvoke(
@@ -848,15 +1308,7 @@ async def get_analytics_insights(db: db_dependency):
             status_code=500,
             detail=f"AI report generation failed: {str(e)[:400]}",
         )
-    return {
-        "stats":             stats,
-        "insight":           report.insight,
-        "riskLevel":         report.risk_level,
-        "potentialSavings":  report.potential_savings,
-        "costProjection":    [m.model_dump() for m in report.cost_projection],
-        "severityInsights":  [s.model_dump() for s in report.severity_insights],
-        "severitySummary":   report.severity_summary,
-        "faultTypeInsights": [f.model_dump() for f in report.fault_type_insights],
-        "faultSummary":      report.fault_summary,
-        "recommendations":   report.recommendations,
-    }
+
+    _insights_cache = _build_insights_response(stats, report)
+    print(_insights_cache)
+    return _insights_cache
