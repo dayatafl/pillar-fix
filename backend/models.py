@@ -23,7 +23,7 @@ class User(Base):
     role = Column(String, nullable=False)
     isActive = Column(Boolean, default=True, nullable=False)
     createdAt = Column(DateTime)
-    locality = Column(String)
+    locality = Column(String, index=True)  # Added locality field for user assignment
     password = Column(String, nullable=False)
 
 
@@ -43,15 +43,15 @@ class Task(Base):
 
     task_id = Column(Integer, primary_key=True, index=True)
     pillar_id = Column(String, ForeignKey("pillars.pillarId"), nullable=False)
-    task_status = Column(String, default="Pending")          # Pending / Submitted / Validated / Completed
+    task_status = Column(String, default="Pending", index=True)          # Pending / Submitted / Validated / Completed
 
     # assigned_to: the technician responsible for the audit
-    assigned_to = Column(String, ForeignKey("users.employeeId"))
+    assigned_to = Column(String, ForeignKey("users.employeeId"), index=True)
     # created_by: the supervisor/system that created the task record
     created_by = Column(String, ForeignKey("users.employeeId"))
 
     due_date = Column(DateTime)         # DateTime (not Date) — consistent with Pydantic
-    created_date = Column(DateTime)
+    created_date = Column(DateTime, index=True)
     updated_date = Column(DateTime)
 
     # Audit images (base64 or URLs)
@@ -67,8 +67,8 @@ class Task(Base):
     detection_result_id = Column(String, ForeignKey("photos.photo_id"))
 
     # Supervisor validation fields
-    validation_status = Column(String)
-    severity_validation = Column(String)
+    validation_status = Column(String, index=True)  # Pending / Validated / Rejected
+    severity_validation = Column(String, index=True)  # None / Low / Medium / High
     priority_validation = Column(String)
     cost_estimation = Column(Float)
     remarks = Column(Text)
@@ -100,10 +100,10 @@ class Photo(Base):
     __tablename__ = "photos"
 
     photo_id = Column(String, primary_key=True, index=True)
-    task_id = Column(Integer, ForeignKey("tasks.task_id"), nullable=False)
+    task_id = Column(Integer, ForeignKey("tasks.task_id"), nullable=False, index=True)
     # Full inference payload: { status, total_detection, detections: [...] }
     inference = Column(JSON)
-    created_date = Column(DateTime)
+    created_date = Column(DateTime, index=True)
     # NOTE: x/y/width/height removed — those belong in Detection rows, not here
 
 
@@ -115,8 +115,8 @@ class Detection(Base):
     __tablename__ = "detections"
 
     id = Column(Integer, primary_key=True, index=True)
-    photo_id = Column(String, ForeignKey("photos.photo_id"), nullable=False)
-    task_id = Column(Integer, ForeignKey("tasks.task_id"), nullable=False)  # fixed: was String
+    photo_id = Column(String, ForeignKey("photos.photo_id"), nullable=False, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.task_id"), nullable=False, index=True)  # fixed: was String
     image_index = Column(Integer)       # 1=front, 2=right, 3=back, 4=left
     x = Column(Float)
     y = Column(Float)

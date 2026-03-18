@@ -308,7 +308,9 @@ function FaultTypeReport({ faultTypeInsights, faultSummary, loading }) {
 export function Analytics({ maintenanceItems, tasks = [] }) {
   const mapRef          = useRef(null);
   const mapContainerRef = useRef(null);
-  const [isMobile, setIsMobile]             = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Geocoded coordinates keyed by locality name
   const [localityCoords, setLocalityCoords] = useState({});
   // ── Chart data (fast, no AI — loads on mount) ───────────────────────────
   const [chartData, setChartData]             = useState([]);
@@ -372,16 +374,27 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
-  useEffect(() => {
-    const localities = [...new Set(tasks.map(t => t.locality).filter(Boolean))];
-    if (!localities.length) return;
-    localities.forEach((locality, i) => {
-      setTimeout(async () => {
-        const coords = await geocodeLocality(locality);
-        setLocalityCoords(prev => ({ ...prev, [locality]: coords }));
-      }, i * 300);
-    });
-  }, []);
+
+useEffect(() => {
+  const localities = [...new Set(tasks.map(t => t.locality).filter(Boolean))];
+  if (!localities.length) return;
+
+  const cached = JSON.parse(localStorage.getItem('locality_coords') || '{}');
+  const missing = localities.filter(l => !cached[l]);
+
+  if (Object.keys(cached).length) setLocalityCoords(cached);
+
+  missing.forEach((locality, i) => {
+    setTimeout(async () => {
+      const coords = await geocodeLocality(locality);
+      setLocalityCoords(prev => {
+        const updated = { ...prev, [locality]: coords };
+        localStorage.setItem('locality_coords', JSON.stringify(updated));
+        return updated;
+      });
+    }, i * 300);
+  });
+}, []);
 
   const rmFormatter  = v => `RM ${Number(v).toLocaleString()}`;
   const costData     = chartData;  // loaded immediately; AI projections merged in after Refresh
@@ -394,8 +407,11 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     { name: 'Low',      value: maintenanceItems.filter(i => i.severity === 'Low').length,      color: '#3B82F6' },
   ];
 
+  const auditedPillarIds = new Set(maintenanceItems.map(m => m.pillarId));
+
   const hotspotAreas = Object.entries(
-    tasks.reduce((acc, task) => {
+    tasks.filter(t => auditedPillarIds.has(t.pillarId)).reduce((acc, task) => {
+
       const loc = task.locality || 'Unknown';
       if (!acc[loc]) acc[loc] = { tasks: [] };
       acc[loc].tasks.push(task);
@@ -403,10 +419,16 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     }, {})
   )
     .map(([locality, { tasks: localTasks }]) => {
-      const criticalCount = localTasks.filter(t => t.severity === 'Critical').length;
-      const costs = localTasks.map(t => t.estimatedCost).filter(Boolean);
+      const localTaskIds = new Set(localTasks.map(t => t.id));
+      const localPillarIds = new Set(localTasks.map(t => t.pillarId));
+      const localItems = maintenanceItems.filter(i => localPillarIds.has(i.pillarId));
+      const criticalCount = localItems.filter(i => i.severity === 'Critical').length;
+      const highCount = localItems.filter(i => i.severity === 'High').length;
+      const dominantSeverity = criticalCount > 0 ? 'Critical' : highCount > 0 ? 'High' : 'Medium';
+      const costs = localItems.map(i => i.estimatedCost).filter(Boolean);
       const averageCost = costs.length > 0 ? Math.round(costs.reduce((a, b) => a + b, 0) / costs.length) : 0;
-      return { locality, coordinates: localityCoords[locality] || DEFAULT_COORDINATES, issueCount: localTasks.length, criticalCount, averageCost };
+
+      return { locality, coordinates: localityCoords[locality] || DEFAULT_COORDINATES, issueCount: localTasks.length, dominantSeverity, criticalCount, averageCost };
     })
     .sort((a, b) => b.issueCount - a.issueCount);
 
@@ -427,32 +449,59 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
-    const map = L.map(mapContainerRef.current).setView([3.1390, 101.6869], 11);
+    const map = L.map(mapContainerRef.current).setView([3.1390, 101.6869], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors', maxZoom: 19,
+      attribution: '© OpenStreetMap contributors', maxZoom: 30,
     }).addTo(map);
     mapRef.current = map;
     return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
   }, []);
 
-  useEffect(() => {
+//To zoom in on the map//
+
+  const zoomToHotspot = (area) => {
     if (!mapRef.current) return;
-    mapRef.current.eachLayer(l => { if (l instanceof L.Circle) mapRef.current?.removeLayer(l); });
-    hotspotAreas.forEach(area => {
-      const circle = L.circle([area.coordinates.lat, area.coordinates.lng], {
-        color:       area.criticalCount > 8 ? '#EF4444' : area.criticalCount > 5 ? '#F97316' : '#EAB308',
-        fillColor:   area.criticalCount > 8 ? '#EF4444' : area.criticalCount > 5 ? '#F97316' : '#EAB308',
-        fillOpacity: 0.3, radius: area.issueCount * 100,
-      }).addTo(mapRef.current);
-      circle.bindPopup(`
-        <div style="min-width:200px;">
-          <h3 style="font-weight:bold;margin-bottom:8px;">${area.locality}</h3>
-          <p style="font-size:12px;margin:4px 0;">Total Issues: ${area.issueCount}</p>
-          <p style="font-size:12px;margin:4px 0;">Critical: ${area.criticalCount}</p>
-          <p style="font-size:12px;margin:4px 0;">Avg Cost: RM ${area.averageCost.toLocaleString()}</p>
-        </div>`);
+    mapRef.current.setView([area.coordinates.lat, area.coordinates.lng], 16, {
+      animate: true,
     });
-  }, [hotspotAreas, localityCoords]);
+  };
+
+
+ useEffect(() => {
+  if (!mapRef.current) return;
+  mapRef.current.eachLayer(l => { if (l instanceof L.Circle) mapRef.current?.removeLayer(l); });
+  
+  const circles = [];
+  hotspotAreas.forEach(area => {
+    const circle = L.circle([area.coordinates.lat, area.coordinates.lng], {
+      color:       area.criticalCount > 8 ? '#EF4444' : area.criticalCount > 5 ? '#F97316' : '#EAB308',
+      fillColor:   area.criticalCount > 8 ? '#EF4444' : area.criticalCount > 5 ? '#F97316' : '#EAB308',
+      fillOpacity: 0.3, radius: area.issueCount * 200, weight: 5,
+    }).addTo(mapRef.current);
+    circle.bindPopup(`
+      <div style="min-width:200px;">
+        <h3 style="font-weight:bold;margin-bottom:8px;">${area.locality}</h3>
+        <p style="font-size:12px;margin:4px 0;">Total Issues: ${area.issueCount}</p>
+        <p style="font-size:12px;margin:4px 0;">Severity: ${area.dominantSeverity}</p>
+        <p style="font-size:12px;margin:4px 0;">Avg Estimated Cost: RM ${area.averageCost.toLocaleString()}</p>
+      </div>
+    `);
+    circles.push(circle);
+  });
+
+  // Auto-fit map to show all circles
+
+  if (circles.length > 0) {
+    const group = L.featureGroup(circles);
+    setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+        mapRef.current.fitBounds(group.getBounds().pad(0.3));
+      }
+    }, 100);
+  }
+  
+}, [hotspotAreas, localityCoords]);
 
   return (
     <div className="space-y-6">
@@ -791,8 +840,10 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
         <CardContent>
           <div ref={mapContainerRef} className="w-full h-[500px] relative z-0 rounded-lg mb-4" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {hotspotAreas.map((area, i) => (
-              <div key={i} className="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+            {hotspotAreas.map((area, index) => (
+              <div onClick={() => zoomToHotspot(area)}
+                className="p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
+
                 <div className="flex items-start justify-between">
                   <div>
                     <h4 className="font-semibold">{area.locality}</h4>
@@ -801,8 +852,8 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
                   <AlertTriangle className={`h-5 w-5 ${area.criticalCount > 8 ? 'text-red-600' : area.criticalCount > 5 ? 'text-orange-600' : 'text-yellow-600'}`} />
                 </div>
                 <div className="mt-3 space-y-1 text-xs text-gray-600">
-                  <p>Critical: {area.criticalCount}</p>
-                  <p>Avg Cost: RM {area.averageCost.toLocaleString()}</p>
+                  <p>Severity: {area.dominantSeverity}</p>
+                  <p>Avg. Estimated Cost: RM {area.averageCost.toLocaleString()}</p>
                 </div>
               </div>
             ))}
