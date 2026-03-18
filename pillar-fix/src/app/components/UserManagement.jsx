@@ -170,13 +170,15 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
           <h2 className="text-3xl font-bold tracking-tight">User Management</h2>
           <p className="text-gray-500 mt-1">Manage system users and their access levels</p>
         </div>
+
         <Button
           onClick={() => setIsCreateDialogOpen(true)}
-          className="h-9 w-9 p-0 sm:h-10 sm:w-auto sm:px-4 sm:py-2"
+          className="hidden sm:flex gap-2"
         >
-          <UserPlus className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Create User</span>
+          <UserPlus className="h-4 w-4" />
+          Create User
         </Button>
+
       </div>
 
       {/* Key Metrics */}
@@ -226,9 +228,17 @@ export function UserManagement({ currentUser, users, onUpdateUsers }) {
         </Card>
       </div>
 
+      <Button
+        onClick={() => setIsCreateDialogOpen(true)}
+        className="w-full sm:hidden gap-2"
+      >
+        <UserPlus className="h-4 w-4" /> Create User
+      </Button>
+
       <Card>
         <CardHeader className="gap-4">
           <CardTitle>Users</CardTitle>
+          
           <CardDescription className="text-[15px] font-normal text-gray-600">A list of all users in the system</CardDescription>
         </CardHeader>
         <CardContent>

@@ -184,12 +184,6 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
               {isTechnician ? 'Tasks assigned to you' : 'Feeder pillar audit assignments by locality'}
             </p>
           </div>
-
-          {isSupervisorOrAbove && (
-            <Button onClick={() => setIsCreateDialogOpen(true)} className="h-9 w-9 p-0 sm:hidden">
-              <ClipboardPen className="h-4 w-4" />
-            </Button>
-          )}
         </div>
       </div>
 
@@ -210,6 +204,11 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
       </div>
 
       {/* Filters Row */}
+      {isSupervisorOrAbove && (
+        <Button onClick={() => setIsCreateDialogOpen(true)} className="w-full sm:hidden gap-2">
+          <ClipboardPen className="h-4 w-4" /> Create Task
+        </Button>
+      )}
       <div className="flex w-full justify-between items-center">
         <div className="flex items-center gap-4">
           <div className="relative w-[13.75rem] md:w-60">
