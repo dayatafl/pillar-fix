@@ -11,7 +11,6 @@ import uuid
 import math
 import os
 import json
-
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -1310,5 +1309,4 @@ async def get_analytics_insights(db: db_dependency, refresh: bool = False):
         )
 
     _insights_cache = _build_insights_response(stats, report)
-    print(_insights_cache)
     return _insights_cache
