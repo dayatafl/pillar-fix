@@ -1,9 +1,10 @@
 node_modules/
 dist/
 __pycache__/
-gaia-capstone6-prd-c0c01ca4c817.json
 # ignore all env files
 .env
 .env.*
 venv
-gaia-capstone6-prd-c0c01ca4c817.json.DS_Store
+gaia-capstone6-prd-c0c01ca4c817.json
+.DS_Store
+.dockerignore

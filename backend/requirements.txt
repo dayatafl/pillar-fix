@@ -1,11 +1,28 @@
+# Web Framework
 fastapi
+
+# ASGI server (commonly used with FastAPI)
 uvicorn
+
+# Database ORM
 sqlalchemy
+
+# Database Driver
+psycopg2-binary # For PostgreSQL
+
+# Data Validation & Settings
 pydantic
-psycopg2 #window
+pydantic[email]
+
+# Environment Variable Management
 python-dotenv
-psycopg2-binary==2.9.9
+
+# Google Cloud Services
 google-cloud-storage
-google-auth
-cloud-sql-python-connector
-pg8000
+
+# AI/LLM Integration
+langchain-google-genai
+langchain-core
+
+# Other common FastAPI dependencies (often implicitly needed or good to have)
+python-multipart # For handling form data and file uploads
