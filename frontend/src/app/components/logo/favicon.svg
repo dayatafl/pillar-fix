@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Outer body (expanded) -->
+  <rect x="85" y="30" width="342" height="440" rx="50" ry="50"
+        fill="none" stroke="#E30613" stroke-width="25"/>
+
+  <!-- Top window -->
+  <rect x="135" y="80" width="242" height="90" rx="16" ry="16"
+        fill="none" stroke="#E30613" stroke-width="25"/>
+
+  <!-- Bottom legs -->
+  <rect x="140" y="470" width="36" height="36" rx="6" fill="#E30613"/>
+  <rect x="336" y="470" width="36" height="36" rx="6" fill="#E30613"/>
+
+  <!-- Lightning bolt (lowered) -->
+  <path d="M270 220 L200 320 L260 320 L240 410 L320 280 L260 280 Z"
+        fill="#1E73BE"/>
+</svg>

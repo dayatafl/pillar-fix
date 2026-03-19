@@ -9,12 +9,9 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts';
+import api from '@/app/api';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-
-const API_BASE =
-  (typeof window !== 'undefined' && window.__ENV__?.API_URL) ||
-  'http://localhost:8000';
 
 const DEFAULT_COORDINATES = { lat: 3.1390, lng: 101.6869 };
 
@@ -327,11 +324,9 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
   const fetchChartData = useCallback(async () => {
     setChartLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/analytics/chart-data`);
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-      const data = await res.json();
-      setChartData(data.chart);
-      setChartMeta(data);
+      const res = await api.get('/analytics/chart-data');
+      setChartData(res.data.chart);
+      setChartMeta(res.data);
     } catch (_) {
       // silent — chart will just be empty until retry
     } finally {
@@ -344,15 +339,10 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     setInsightsLoading(true);
     setInsightsError(null);
     try {
-      const url = force
-        ? `${API_BASE}/analytics/insights?refresh=true`
-        : `${API_BASE}/analytics/insights`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Server error ${res.status}`);
-      }
-      const data = await res.json();
+      const res = await api.get('/analytics/insights', {
+        params: force ? { refresh: true } : {},
+      });
+      const data = res.data;
       setInsights(data);
       // Merge AI projections into the chart — replace chart with the full series
       if (data.costProjection?.length) {
@@ -492,11 +482,13 @@ useEffect(() => {
   // Auto-fit map to show all circles
 
   if (circles.length > 0) {
-    const group = L.featureGroup(circles);
+    // L.circle.getBounds() requires the circle to be projected by the map first.
+    // Building bounds from the centre LatLngs is safe at any point in the render cycle.
+    const bounds = L.latLngBounds(circles.map(c => c.getLatLng()));
     setTimeout(() => {
-      if (mapRef.current) {
+      if (mapRef.current && mapRef.current.getContainer()?.isConnected) {
         mapRef.current.invalidateSize();
-        mapRef.current.fitBounds(group.getBounds().pad(0.3));
+        mapRef.current.fitBounds(bounds.pad(0.3));
       }
     }, 100);
   }
@@ -840,8 +832,8 @@ useEffect(() => {
         <CardContent>
           <div ref={mapContainerRef} className="w-full h-[500px] relative z-0 rounded-lg mb-4" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {hotspotAreas.map((area, index) => (
-              <div onClick={() => zoomToHotspot(area)}
+            {hotspotAreas.map((area) => (
+              <div key={area.locality} onClick={() => zoomToHotspot(area)}
                 className="p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
 
                 <div className="flex items-start justify-between">

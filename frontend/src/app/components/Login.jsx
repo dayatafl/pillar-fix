@@ -5,7 +5,7 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Button } from '@/app/components/ui/button';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import logo from './logo/FINAL.svg';
+import logo from './logo/favicon.svg';
 import api from "@/app/api";
 
 export function Login({ onLogin }) {
@@ -43,7 +43,7 @@ export function Login({ onLogin }) {
         <CardHeader className="flex flex-col items-center pb-0">
         {/* Changed mb-2 to mb-0 to remove the gap below the logo */}
         <div className="flex items-center justify-center mb-0">
-          <img src={logo} className="w-20" alt="Logo" />
+          <img src={logo} className="w-30" alt="Logo" />
         </div>
         
         {/* Added mt-1 to provide just a tiny sliver of space if needed, 

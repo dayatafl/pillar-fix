@@ -61,8 +61,6 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
         validation_by: currentUser.employeeId,
       });
 
-      console.log("Approve response:", response); // <-- add this
-
       onApprove(submission.id, { severity: aiOverallRisk, cost, notes });
       toast.success("Maintenance approved");
     } catch (err) {

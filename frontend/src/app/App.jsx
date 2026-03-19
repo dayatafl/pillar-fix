@@ -27,7 +27,7 @@ import { Login } from '@/app/components/Login';
 import { UserManagement } from '@/app/components/UserManagement';
 import { EnhancedMapView } from '@/app/components/EnhancedMapView';
 import { toast } from 'sonner';
-import logo from './components/logo/FINAL.svg';
+import logo from './components/logo/favicon.svg';
 import api from "@/app/api";
 
 export default function App() {
@@ -66,10 +66,6 @@ export default function App() {
       const tasks = tasksRes.data;
       setAuditTasks(tasks);
       // Enrich each submission with dueDate from its matching task
-
-      console.log('All maintenance items:', maintenanceRes.data.map(m => ({ 
-        pillarId: m.pillarId, severity: m.severity, locality: m.locality 
-      })));
 
       const enrichedSubmissions = submissionsRes.data.map(sub => ({
         ...sub,

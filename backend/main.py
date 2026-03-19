@@ -1,6 +1,4 @@
 from dotenv import load_dotenv
-load_dotenv() 
-
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Annotated, Optional
@@ -17,7 +15,7 @@ import json
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 
-
+load_dotenv() 
 app = FastAPI()
 
 app.add_middleware(
@@ -1010,18 +1008,19 @@ async def update_maintenance(task_id: int, data: TaskMaintenance, db: db_depende
     if not task:
         raise HTTPException(404, "Task not found")
     raw  = task.work_log
-    logs = raw if isinstance(raw, list) else ([raw] if isinstance(raw, dict) else [])
+    existing = raw if isinstance(raw, list) else ([raw] if isinstance(raw, dict) else [])
     uploaded = [
         upload_image_to_gcs(img, f"maintenance/task_{task_id}_worklog_{uuid.uuid4().hex[:8]}.jpg")
         for img in (data.images or [])
     ]
-    logs.append({
+    new_entry = {
+        "id": uuid.uuid4().hex,
         "action": data.action, "notes": data.notes, "images": uploaded,
         "logged_by": data.logged_by,
         "logged_by_name": db.query(User.name).filter(User.employeeId == data.logged_by).scalar(),
         "timestamp": datetime.utcnow().isoformat(),
-    })
-    task.work_log           = logs
+    }
+    task.work_log = [*existing, new_entry]  # brand new list — SQLAlchemy sees a new object
     task.maintenance_status = data.maintenance_status
     task.logged_by          = data.logged_by
     if data.completion_evidence:
