@@ -113,6 +113,32 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
     filteredTasks = filteredTasks.filter(task => task.status === statusFilter);
   }
 
+  const getTaskSubmissionTimestamp = (task) => {
+    const matchedSubmission = submissions.find(submission => submission.taskId === task.id);
+    const submittedAt = matchedSubmission?.submittedAt ? new Date(matchedSubmission.submittedAt).getTime() : 0;
+    return Number.isNaN(submittedAt) ? 0 : submittedAt;
+  };
+
+  const getTaskSubmittedDateLabel = (task) => {
+    const matchedSubmission = submissions.find(submission => submission.taskId === task.id);
+    if (!matchedSubmission?.submittedAt) return '';
+
+    const submittedAt = new Date(matchedSubmission.submittedAt);
+    return Number.isNaN(submittedAt.getTime())
+      ? ''
+      : submittedAt.toLocaleDateString('en-GB');
+  };
+
+  const sortedFilteredTasks = [...filteredTasks].sort((a, b) => {
+    const submissionTimeDiff = getTaskSubmissionTimestamp(b) - getTaskSubmissionTimestamp(a);
+    if (submissionTimeDiff !== 0) return submissionTimeDiff;
+
+    const dueDateDiff = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    if (!Number.isNaN(dueDateDiff) && dueDateDiff !== 0) return dueDateDiff;
+
+    return String(a.pillarId).localeCompare(String(b.pillarId));
+  });
+
   const tasksAllTasks = isTechnician
     ? tasks.filter(task => task.assignedTo === currentUser?.name || !task.assignedTo)
     : tasks;
@@ -131,7 +157,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
         completed: tasksAllTasks.filter(t => isTaskDone(t.status)).length,
   };
 
-  const groupedByLocality = filteredTasks.reduce((acc, task) => {
+  const groupedByLocality = sortedFilteredTasks.reduce((acc, task) => {
     if (!acc[task.locality]) acc[task.locality] = [];
     acc[task.locality].push(task);
     return acc;
@@ -218,7 +244,7 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
             >
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 shrink-0" />
-                <span>{selectedDate ? format(selectedDate, 'dd MMM yyyy') : 'Filter by Date'}</span>
+                <span>{selectedDate ? format(selectedDate, 'dd MMM yyyy') : 'Filter by Due Date'}</span>
                 {selectedDate && <Badge variant="secondary" className="text-[10px] h-4">Active</Badge>}
               </div>
               <div className="flex items-center">
@@ -288,16 +314,17 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
 
                     <p className="text-sm text-gray-600 leading-relaxed">{task.address}</p>
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
                       {task.assignedTo && (
                         <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
                           <UserRound className="h-3 w-3 mr-1" />
                           {task.assignedTo}
                         </Badge>
                       )}
-                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                      <span className="text-[11px] text-gray-400 flex items-center gap-1">
                         <CalendarDays className="h-3 w-3" />
-                        Due: {new Date(task.dueDate).toLocaleDateString()}
+                        {getTaskSubmittedDateLabel(task) ? `Submit: ${getTaskSubmittedDateLabel(task)} | ` : ''}
+                        Due: {new Date(task.dueDate).toLocaleDateString('en-GB')}
                       </span>
                     </div>
 
@@ -337,8 +364,9 @@ export function TechnicianDashboard({ tasks, submissions, onStartAudit, onViewAI
                         <MapPin className="h-3 w-3" />
                         {task.address}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Due: {new Date(task.dueDate).toLocaleDateString()}
+                      <p className="text-[11px] text-gray-400 mt-2">
+                        {getTaskSubmittedDateLabel(task) ? `Submit: ${getTaskSubmittedDateLabel(task)} | ` : ''}
+                        Due: {new Date(task.dueDate).toLocaleDateString('en-GB')}
                       </p>
                     </div>
 

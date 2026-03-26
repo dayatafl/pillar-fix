@@ -290,7 +290,7 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
                 <p className="font-medium">{submission.submittedBy}</p>
               </div>
               <div>
-                <span className="text-gray-600">Submitted At:</span>
+                <span className="text-gray-600">Submitted On:</span>
                 <p className="font-medium">{formatDateOnly(submission.submittedAt)}</p>
               </div>
               <div>

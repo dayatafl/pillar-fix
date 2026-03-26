@@ -27,11 +27,18 @@ export function Login({ onLogin }) {
       });
       if (!data.exists) {
         setError("Invalid credentials");
+      } else if (!data.user.isActive) {
+        setError("This account has been deactivated. Please contact your administrator.");
       } else {
         onLogin(data.user);
       }
     } catch (err) {
-      setError(err.response?.data?.detail || "Server error");
+      if (err.response?.status === 403) {
+        setError("This account has been deactivated. Please contact your administrator.");
+      } else {
+        const detail = err.response?.data?.detail;
+        setError(typeof detail === 'string' ? detail : "Server error");
+      }
     } finally {
       setLoading(false);
     }
