@@ -116,9 +116,9 @@ function CostAnalysisReport({ costAnalysis, savingRatePct, savingRateSource, loa
 
   const trend     = TREND_CONFIG[costAnalysis.cost_trend] || TREND_CONFIG.Stable;
   const TrendIcon = trend.icon;
-  const effCfg    = EFFICIENCY_CONFIG[costAnalysis.cost_efficiency_rating?.split(' ')[0]] || EFFICIENCY_CONFIG.Fair;
+  const effKey    = (costAnalysis.cost_efficiency_rating || '').split(' ')[0];
+  const effCfg    = EFFICIENCY_CONFIG[effKey] || EFFICIENCY_CONFIG.Fair;
 
-  // Locality bar chart data
   const localityChartData = (costAnalysis.locality_breakdown || [])
     .filter(l => l.locality !== 'Unknown' || l.total_cost > 0)
     .map(l => ({ name: l.locality, cost: l.total_cost, avg: l.avg_cost }))
@@ -126,29 +126,23 @@ function CostAnalysisReport({ costAnalysis, savingRatePct, savingRateSource, loa
 
   return (
     <div className="space-y-5">
-      {/* Summary narrative */}
       {costAnalysis.cost_summary && (
         <p className="text-sm text-gray-600 leading-relaxed border-l-2 border-gray-200 pl-3 italic">
           {costAnalysis.cost_summary}
         </p>
       )}
 
-      {/* Saving rate provenance badge */}
       {savingRateSource && (
         <div className="flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
           <BarChart2 className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
           <div>
-            <span className="text-xs font-semibold text-blue-800">
-              Saving rate: {savingRatePct}%
-            </span>
+            <span className="text-xs font-semibold text-blue-800">Saving rate: {savingRatePct}%</span>
             <span className="text-xs text-blue-600 ml-1">— {savingRateSource}</span>
           </div>
         </div>
       )}
 
-      {/* Trend + Efficiency + Most expensive */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Cost trend */}
         <div className="rounded-xl bg-white border border-gray-200 p-3">
           <p className="text-xs text-gray-400 mb-2">Cost Trend</p>
           <div className={`flex items-center gap-1.5 font-semibold text-sm ${trend.color} mb-1`}>
@@ -158,7 +152,6 @@ function CostAnalysisReport({ costAnalysis, savingRatePct, savingRateSource, loa
           <p className="text-xs text-gray-500 leading-relaxed">{costAnalysis.cost_trend_explanation}</p>
         </div>
 
-        {/* Efficiency rating */}
         <div className="rounded-xl bg-white border border-gray-200 p-3">
           <p className="text-xs text-gray-400 mb-2">Cost Efficiency</p>
           <span className={`inline-block text-xs px-2 py-1 rounded-sm font-medium border ${effCfg} mb-1`}>
@@ -166,7 +159,6 @@ function CostAnalysisReport({ costAnalysis, savingRatePct, savingRateSource, loa
           </span>
         </div>
 
-        {/* Most expensive locality */}
         <div className="rounded-xl bg-white border border-gray-200 p-3">
           <p className="text-xs text-gray-400 mb-2">Highest Cost Area</p>
           <div className="flex items-center gap-1.5">
@@ -176,7 +168,6 @@ function CostAnalysisReport({ costAnalysis, savingRatePct, savingRateSource, loa
         </div>
       </div>
 
-      {/* Locality cost breakdown */}
       {localityChartData.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Cost by Locality</p>
@@ -190,7 +181,6 @@ function CostAnalysisReport({ costAnalysis, savingRatePct, savingRateSource, loa
             </BarChart>
           </ResponsiveContainer>
 
-          {/* Locality table */}
           <div className="mt-3 space-y-2">
             {costAnalysis.locality_breakdown.map((loc, i) => (
               <div key={i} className="rounded-lg border border-gray-100 bg-white p-3">
@@ -205,7 +195,6 @@ function CostAnalysisReport({ costAnalysis, savingRatePct, savingRateSource, loa
                     <span className="text-gray-400">({(loc.cost_share || 0).toFixed(1)}%)</span>
                   </div>
                 </div>
-                {/* Cost share bar */}
                 <div className="h-1 bg-gray-100 rounded-full mb-1.5 overflow-hidden">
                   <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.min(loc.cost_share || 0, 100)}%` }} />
                 </div>
@@ -307,34 +296,32 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
   const mapContainerRef = useRef(null);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Geocoded coordinates keyed by locality name
   const [localityCoords, setLocalityCoords] = useState({});
-  // ── Chart data (fast, no AI — loads on mount) ───────────────────────────
-  const [chartData, setChartData]             = useState([]);
-  const [chartLoading, setChartLoading]       = useState(false);
-  const [chartMeta, setChartMeta]             = useState(null);
 
-  // ── AI insights (slow, manual only — triggered by Refresh button) ────────
+  // ── Chart data (fast, no AI) ─────────────────────────────────────────────
+  const [chartData, setChartData]       = useState([]);
+  const [chartLoading, setChartLoading] = useState(false);
+
+  // ── AI insights ──────────────────────────────────────────────────────────
   const [insights, setInsights]               = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError]     = useState(null);
   const [lastFetched, setLastFetched]         = useState(null);
 
-  // Fetch chart data immediately on mount — no AI, just DB costs
+  // Load chart baseline immediately on mount
   const fetchChartData = useCallback(async () => {
     setChartLoading(true);
     try {
       const res = await api.get('/analytics/chart-data');
       setChartData(res.data.chart);
-      setChartMeta(res.data);
     } catch (_) {
-      // silent — chart will just be empty until retry
+      // silent
     } finally {
       setChartLoading(false);
     }
   }, []);
 
-  // Fetch AI insights on demand — merges projections into chart
+  // Fetch AI insights — called on mount AND on manual refresh
   const fetchInsights = useCallback(async (force = false) => {
     setInsightsLoading(true);
     setInsightsError(null);
@@ -344,7 +331,7 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
       });
       const data = res.data;
       setInsights(data);
-      // Merge AI projections into the chart — replace chart with the full series
+      // Merge AI projections into chart — costProjection IS the full 8-point series
       if (data.costProjection?.length) {
         setChartData(data.costProjection);
       }
@@ -355,9 +342,15 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
       setInsightsLoading(false);
     }
   }, []);
-  // Chart data loads immediately on mount — no AI needed
-  useEffect(() => { fetchChartData(); }, [fetchChartData]);
+
+  // On mount: load chart immediately, then load AI insights (uses cache on server)
+  useEffect(() => {
+    fetchChartData();
+    fetchInsights(false); // uses cached report — fast if cache warm, slow on cold start
+  }, [fetchChartData, fetchInsights]);
+
   useEffect(() => { window.scrollTo(0, 0); }, []);
+
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
@@ -365,29 +358,32 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-useEffect(() => {
-  const localities = [...new Set(tasks.map(t => t.locality).filter(Boolean))];
-  if (!localities.length) return;
+  // ── Geocode localities whenever tasks list changes ───────────────────────
+  useEffect(() => {
+    const localities = [...new Set(tasks.map(t => t.locality).filter(Boolean))];
+    if (!localities.length) return;
 
-  const cached = JSON.parse(localStorage.getItem('locality_coords') || '{}');
-  const missing = localities.filter(l => !cached[l]);
+    const cached = (() => {
+      try { return JSON.parse(localStorage.getItem('locality_coords') || '{}'); }
+      catch { return {}; }
+    })();
+    const missing = localities.filter(l => !cached[l]);
 
-  if (Object.keys(cached).length) setLocalityCoords(cached);
+    if (Object.keys(cached).length) setLocalityCoords(cached);
 
-  missing.forEach((locality, i) => {
-    setTimeout(async () => {
-      const coords = await geocodeLocality(locality);
-      setLocalityCoords(prev => {
-        const updated = { ...prev, [locality]: coords };
-        localStorage.setItem('locality_coords', JSON.stringify(updated));
-        return updated;
-      });
-    }, i * 300);
-  });
-}, []);
+    missing.forEach((locality, i) => {
+      setTimeout(async () => {
+        const coords = await geocodeLocality(locality);
+        setLocalityCoords(prev => {
+          const updated = { ...prev, [locality]: coords };
+          try { localStorage.setItem('locality_coords', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+      }, i * 300);
+    });
+  }, [tasks]); // ← tasks in deps so geocoding re-runs when tasks load
 
-  const rmFormatter  = v => `RM ${Number(v).toLocaleString()}`;
-  const costData     = chartData;  // loaded immediately; AI projections merged in after Refresh
+  // ── Derived data ─────────────────────────────────────────────────────────
   const potentialSavings = insights?.potentialSavings ?? 0;
 
   const severityData = [
@@ -401,7 +397,6 @@ useEffect(() => {
 
   const hotspotAreas = Object.entries(
     tasks.filter(t => auditedPillarIds.has(t.pillarId)).reduce((acc, task) => {
-
       const loc = task.locality || 'Unknown';
       if (!acc[loc]) acc[loc] = { tasks: [] };
       acc[loc].tasks.push(task);
@@ -409,16 +404,21 @@ useEffect(() => {
     }, {})
   )
     .map(([locality, { tasks: localTasks }]) => {
-      const localTaskIds = new Set(localTasks.map(t => t.id));
       const localPillarIds = new Set(localTasks.map(t => t.pillarId));
-      const localItems = maintenanceItems.filter(i => localPillarIds.has(i.pillarId));
-      const criticalCount = localItems.filter(i => i.severity === 'Critical').length;
-      const highCount = localItems.filter(i => i.severity === 'High').length;
+      const localItems     = maintenanceItems.filter(i => localPillarIds.has(i.pillarId));
+      const criticalCount  = localItems.filter(i => i.severity === 'Critical').length;
+      const highCount      = localItems.filter(i => i.severity === 'High').length;
       const dominantSeverity = criticalCount > 0 ? 'Critical' : highCount > 0 ? 'High' : 'Medium';
       const costs = localItems.map(i => i.estimatedCost).filter(Boolean);
       const averageCost = costs.length > 0 ? Math.round(costs.reduce((a, b) => a + b, 0) / costs.length) : 0;
-
-      return { locality, coordinates: localityCoords[locality] || DEFAULT_COORDINATES, issueCount: localTasks.length, dominantSeverity, criticalCount, averageCost };
+      return {
+        locality,
+        coordinates: localityCoords[locality] || DEFAULT_COORDINATES,
+        issueCount: localTasks.length,
+        dominantSeverity,
+        criticalCount,
+        averageCost,
+      };
     })
     .sort((a, b) => b.issueCount - a.issueCount);
 
@@ -437,6 +437,7 @@ useEffect(() => {
     ? { contentStyle: { fontSize: 12, padding: '8px 10px', borderRadius: 10, borderColor: '#E5E7EB' }, labelStyle: { fontSize: 11, marginBottom: 4, color: '#374151' }, itemStyle: { fontSize: 12 } }
     : { contentStyle: { fontSize: 13, padding: '10px 12px', borderRadius: 10, borderColor: '#E5E7EB' }, labelStyle: { fontSize: 12, marginBottom: 4, color: '#374151' }, itemStyle: { fontSize: 13 } };
 
+  // ── Map setup ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
     const map = L.map(mapContainerRef.current).setView([3.1390, 101.6869], 13);
@@ -447,54 +448,46 @@ useEffect(() => {
     return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
   }, []);
 
-//To zoom in on the map//
-
   const zoomToHotspot = (area) => {
     if (!mapRef.current) return;
-    mapRef.current.setView([area.coordinates.lat, area.coordinates.lng], 16, {
-      animate: true,
-    });
+    mapRef.current.setView([area.coordinates.lat, area.coordinates.lng], 16, { animate: true });
   };
 
+  // Redraw circles whenever hotspot areas or geocoded coords change
+  useEffect(() => {
+    if (!mapRef.current) return;
+    mapRef.current.eachLayer(l => { if (l instanceof L.Circle) mapRef.current?.removeLayer(l); });
 
- useEffect(() => {
-  if (!mapRef.current) return;
-  mapRef.current.eachLayer(l => { if (l instanceof L.Circle) mapRef.current?.removeLayer(l); });
-  
-  const circles = [];
-  hotspotAreas.forEach(area => {
-    const circle = L.circle([area.coordinates.lat, area.coordinates.lng], {
-      color:       area.criticalCount > 8 ? '#EF4444' : area.criticalCount > 5 ? '#F97316' : '#EAB308',
-      fillColor:   area.criticalCount > 8 ? '#EF4444' : area.criticalCount > 5 ? '#F97316' : '#EAB308',
-      fillOpacity: 0.3, radius: area.issueCount * 200, weight: 5,
-    }).addTo(mapRef.current);
-    circle.bindPopup(`
-      <div style="min-width:200px;">
-        <h3 style="font-weight:bold;margin-bottom:8px;">${area.locality}</h3>
-        <p style="font-size:12px;margin:4px 0;">Total Issues: ${area.issueCount}</p>
-        <p style="font-size:12px;margin:4px 0;">Severity: ${area.dominantSeverity}</p>
-        <p style="font-size:12px;margin:4px 0;">Avg Estimated Cost: RM ${area.averageCost.toLocaleString()}</p>
-      </div>
-    `);
-    circles.push(circle);
-  });
+    const circles = [];
+    hotspotAreas.forEach(area => {
+      const circle = L.circle([area.coordinates.lat, area.coordinates.lng], {
+        color:       area.criticalCount > 8 ? '#EF4444' : area.criticalCount > 5 ? '#F97316' : '#EAB308',
+        fillColor:   area.criticalCount > 8 ? '#EF4444' : area.criticalCount > 5 ? '#F97316' : '#EAB308',
+        fillOpacity: 0.3, radius: area.issueCount * 200, weight: 5,
+      }).addTo(mapRef.current);
+      circle.bindPopup(`
+        <div style="min-width:200px;">
+          <h3 style="font-weight:bold;margin-bottom:8px;">${area.locality}</h3>
+          <p style="font-size:12px;margin:4px 0;">Total Issues: ${area.issueCount}</p>
+          <p style="font-size:12px;margin:4px 0;">Severity: ${area.dominantSeverity}</p>
+          <p style="font-size:12px;margin:4px 0;">Avg Estimated Cost: RM ${area.averageCost.toLocaleString()}</p>
+        </div>
+      `);
+      circles.push(circle);
+    });
 
-  // Auto-fit map to show all circles
+    if (circles.length > 0) {
+      const bounds = L.latLngBounds(circles.map(c => c.getLatLng()));
+      setTimeout(() => {
+        if (mapRef.current && mapRef.current.getContainer()?.isConnected) {
+          mapRef.current.invalidateSize();
+          mapRef.current.fitBounds(bounds.pad(0.3));
+        }
+      }, 100);
+    }
+  }, [hotspotAreas, localityCoords]); // ← localityCoords here so circles move when geocoding resolves
 
-  if (circles.length > 0) {
-    // L.circle.getBounds() requires the circle to be projected by the map first.
-    // Building bounds from the centre LatLngs is safe at any point in the render cycle.
-    const bounds = L.latLngBounds(circles.map(c => c.getLatLng()));
-    setTimeout(() => {
-      if (mapRef.current && mapRef.current.getContainer()?.isConnected) {
-        mapRef.current.invalidateSize();
-        mapRef.current.fitBounds(bounds.pad(0.3));
-      }
-    }, 100);
-  }
-  
-}, [hotspotAreas, localityCoords]);
-
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -541,11 +534,9 @@ useEffect(() => {
                 : <div className="text-2xl font-bold text-gray-300">—</div>
             }
             <p className="text-xs text-gray-500 mt-1">
-              With preventive maintenance (12 mo)
+              With preventive maintenance (4-year)
               {insights?.stats?.saving_rate_pct != null && (
-                <span className="ml-1 text-gray-400">
-                  · {insights.stats.saving_rate_pct}% saving
-                </span>
+                <span className="ml-1 text-gray-400">· {insights.stats.saving_rate_pct}% saving</span>
               )}
             </p>
           </CardContent>
@@ -582,103 +573,93 @@ useEffect(() => {
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Error */}
           {insightsError && !insightsLoading && (
             <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>{insightsError}</span>
-              <button onClick={fetchInsights} className="ml-auto underline text-xs">Retry</button>
+              <button onClick={() => fetchInsights(false)} className="ml-auto underline text-xs">Retry</button>
             </div>
           )}
 
-          {(insightsLoading || insights) && (
+          {/* Always show skeleton while loading, even on first load */}
+          {insightsLoading && !insights && (
+            <div className="space-y-4">
+              <SkeletonBlock rows={2} />
+              <hr className="border-blue-100" />
+              <SkeletonBlock rows={4} />
+            </div>
+          )}
+
+          {insights && (
             <>
-              {/* Executive summary */}
               <div>
-                {insightsLoading
-                  ? <SkeletonBlock rows={2} />
-                  : insights
-                    ? <p className="text-sm text-blue-900 leading-relaxed">{insights.insight}</p>
-                    : <p className="text-sm text-gray-400 italic">Click Refresh to generate the AI report.</p>
-                }
+                <p className="text-sm text-blue-900 leading-relaxed">{insights.insight}</p>
               </div>
 
               <hr className="border-blue-100" />
 
-              {/* Cost Analysis */}
               <CollapsibleSection title="Cost Analysis" icon={DollarSign} iconClass="text-blue-500" defaultOpen={false}>
                 <CostAnalysisReport
-                  costAnalysis={insights?.costAnalysis}
-                  savingRatePct={insights?.stats?.saving_rate_pct}
-                  savingRateSource={insights?.stats?.saving_rate_source}
-                  loading={insightsLoading}
+                  costAnalysis={insights.costAnalysis}
+                  savingRatePct={insights.stats?.saving_rate_pct}
+                  savingRateSource={insights.stats?.saving_rate_source}
+                  loading={false}
                 />
               </CollapsibleSection>
 
               <hr className="border-blue-100" />
 
-              {/* Severity */}
               <CollapsibleSection title="Severity Level Analysis" icon={ShieldAlert} iconClass="text-orange-500" defaultOpen={false}>
                 <SeverityReport
-                  severityInsights={insights?.severityInsights}
-                  severitySummary={insights?.severitySummary}
-                  loading={insightsLoading}
+                  severityInsights={insights.severityInsights}
+                  severitySummary={insights.severitySummary}
+                  loading={false}
                 />
               </CollapsibleSection>
 
               <hr className="border-blue-100" />
 
-              {/* Fault types */}
               <CollapsibleSection title="Fault Type Analysis" icon={Wrench} iconClass="text-blue-500" defaultOpen={false}>
                 <FaultTypeReport
-                  faultTypeInsights={insights?.faultTypeInsights}
-                  faultSummary={insights?.faultSummary}
-                  loading={insightsLoading}
+                  faultTypeInsights={insights.faultTypeInsights}
+                  faultSummary={insights.faultSummary}
+                  loading={false}
                 />
               </CollapsibleSection>
 
               <hr className="border-blue-100" />
 
-              {/* Recommendations */}
               <CollapsibleSection title="Recommendations" icon={ChevronRight} iconClass="text-green-500" defaultOpen>
-                {insightsLoading
-                  ? <SkeletonBlock rows={3} />
-                  : (
-                    <ul className="space-y-2">
-                      {(insights?.recommendations ?? []).map((rec, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                          <ChevronRight className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
-                          {rec}
-                        </li>
-                      ))}
-                    </ul>
-                  )
-                }
+                <ul className="space-y-2">
+                  {(insights.recommendations ?? []).map((rec, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                      <ChevronRight className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+                      {rec}
+                    </li>
+                  ))}
+                </ul>
               </CollapsibleSection>
             </>
           )}
         </CardContent>
       </Card>
 
-      {/* Cost History + 12-Month Projection chart */}
+      {/* Cost History + Yearly Projection chart */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Cost History &amp; 12-Month Projection
+              Cost History &amp; Yearly Projection (2023–2030)
             </CardTitle>
             <div className="flex items-center gap-3 text-xs text-gray-400">
               <span className="flex items-center gap-1">
-                <span className="inline-block w-6 h-0.5 bg-blue-500" />
-                Actual
+                <span className="inline-block w-6 h-0.5 bg-blue-500" /> Actual
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block w-6 h-0.5 bg-orange-400" style={{borderTop: '2px dashed #fb923c'}} />
-                Projected
+                <span className="inline-block w-6 h-0.5 bg-orange-400" style={{ borderTop: '2px dashed #fb923c' }} /> Projected
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block w-6 h-0.5 bg-emerald-500" />
-                Preventive
+                <span className="inline-block w-6 h-0.5 bg-emerald-500" /> Preventive
               </span>
             </div>
           </div>
@@ -686,46 +667,39 @@ useEffect(() => {
         <CardContent>
           {chartLoading ? (
             <div className="w-full h-64 bg-gray-100 rounded-lg animate-pulse" />
-          ) : costData.length === 0 ? (
+          ) : chartData.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 gap-3">
               <p className="text-sm text-gray-400">No data yet.</p>
             </div>
           ) : (
             <>
-              {/* Projection pending notice — shown before AI is run */}
-              {!insights && !insightsLoading && (
-                <div className="mb-3 flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-blue-400" />
-                  Click <strong className="mx-1">Refresh</strong> in the AI Insights panel above to add the 12-month cost projection.
-                </div>
-              )}
-              {/* Mock data notice */}
-              {costData.some(d => d.is_mock) && (
+              {/* Mock data notice for 2023-2025 */}
+              {chartData.some(d => d.is_mock) && (
                 <div className="mb-3 flex items-center gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-yellow-500" />
-                  Historical months with no tasks yet are shown as estimated values based on average cost and Malaysian seasonal patterns.
+                  Historical values for 2023–2025 are estimated benchmarks. Projection lines appear after AI insights load.
                 </div>
               )}
               <div className={isMobile ? 'w-full overflow-x-auto' : ''}>
                 <ResponsiveContainer width="100%" height={isMobile ? 320 : 420} minWidth={isMobile ? 340 : undefined}>
-                  <LineChart data={costData} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+                  <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="month" tick={{ fontSize: isMobile ? 10 : 11 }} />
+                    {/* ↓ dataKey="year" matches the backend's { year, actual, projected, preventive } shape */}
+                    <XAxis dataKey="year" tick={{ fontSize: isMobile ? 10 : 11 }} />
                     <YAxis
                       tick={{ fontSize: isMobile ? 10 : 11 }}
                       width={isMobile ? 52 : 64}
-                      tickFormatter={v => `RM${(v/1000).toFixed(0)}k`}
+                      tickFormatter={v => `RM${(v / 1000).toFixed(0)}k`}
                     />
                     <Tooltip
                       formatter={(value, name) => [
                         value != null ? `RM ${Number(value).toLocaleString()}` : '—',
-                        name
+                        name,
                       ]}
                       contentStyle={tooltipStyles.contentStyle}
                       labelStyle={tooltipStyles.labelStyle}
                       itemStyle={tooltipStyles.itemStyle}
                     />
-                    {/* Actual historical line — solid blue */}
                     <Line
                       type="monotone"
                       dataKey="actual"
@@ -736,8 +710,8 @@ useEffect(() => {
                         if (payload.actual == null) return null;
                         return (
                           <circle
-                            key={`dot-${payload.month}`}
-                            cx={cx} cy={cy} r={3}
+                            key={`dot-${payload.year}`}
+                            cx={cx} cy={cy} r={4}
                             fill={payload.is_mock ? '#93C5FD' : '#3B82F6'}
                             stroke={payload.is_mock ? '#BFDBFE' : '#2563EB'}
                             strokeWidth={payload.is_mock ? 1.5 : 1}
@@ -748,7 +722,6 @@ useEffect(() => {
                       connectNulls={false}
                       name="Actual cost"
                     />
-                    {/* Projected reactive line — dashed orange */}
                     <Line
                       type="monotone"
                       dataKey="projected"
@@ -759,7 +732,6 @@ useEffect(() => {
                       connectNulls={false}
                       name="Projected (reactive)"
                     />
-                    {/* Preventive line — solid green */}
                     <Line
                       type="monotone"
                       dataKey="preventive"
@@ -776,7 +748,7 @@ useEffect(() => {
               {potentialSavings > 0 && (
                 <div className={`mt-4 rounded-lg bg-green-50 ${isMobile ? 'p-3' : 'p-4'}`}>
                   <p className={`${isMobile ? 'text-xs' : 'text-sm'} text-green-900`}>
-                    <strong>12-Month Projected Savings:</strong> Adopting preventive maintenance could save up to{' '}
+                    <strong>4-YEAR PROJECTED SAVING:</strong> Adopting preventive maintenance could save up to{' '}
                     <strong>RM {potentialSavings.toLocaleString()}</strong>.
                     {insights?.stats?.saving_rate_pct && (
                       <span className="text-green-700 ml-1">
@@ -835,7 +807,6 @@ useEffect(() => {
             {hotspotAreas.map((area) => (
               <div key={area.locality} onClick={() => zoomToHotspot(area)}
                 className="p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
-
                 <div className="flex items-start justify-between">
                   <div>
                     <h4 className="font-semibold">{area.locality}</h4>

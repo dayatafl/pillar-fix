@@ -7,12 +7,49 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/ta
 
 export function DetectionResults({ submission, onBack, onSendToSupervisor, currentUser, onViewValidation }) {
   const [selectedSide, setSelectedSide] = useState('front');
+  const [imageSizes, setImageSizes] = useState({});
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
+  const normalizeFaultType = (box) => {
+    const label = box?.faultType || box?.class || box?.label || 'Unknown';
+    return String(label).trim();
+  };
+
+  const isFeederPillar = (faultType) => {
+    return String(faultType || '').trim().toLowerCase() === 'feeder pillar';
+  };
+
+  const toPercent = (value, dimension) => {
+    const n = Number(value ?? 0);
+    if (Number.isNaN(n) || n <= 0) return 0;
+    if (n <= 1) return n * 100;
+    if (n <= 100) return n;
+    if (dimension && dimension > 0) {
+      return Math.min(100, Math.max(0, (n / dimension) * 100));
+    }
+    return Math.min(100, Math.max(0, n));
+  };
+
+  const normalizeBox = (box, size) => {
+    const faultType = normalizeFaultType(box);
+    const confidence = Number(box?.confidence ?? box?.confidence_level ?? 0);
+
+    const x = toPercent(box?.x, size?.width);
+    const y = toPercent(box?.y, size?.height);
+    const width = toPercent(box?.width, size?.width);
+    const height = toPercent(box?.height, size?.height);
+
+    return { x, y, width, height, confidence, faultType };
+  };
+
   const currentResult = submission.detectionResults?.find(r => r.side === selectedSide);
+  const allFaults = submission.detectionResults?.flatMap(r =>
+    (r.boundingBoxes ?? []).map(b => normalizeFaultType(b))
+  ).filter((v, i, a) => a.indexOf(v) === i) || [];
+  const filteredFaults = allFaults.filter(f => !isFeederPillar(f));
   const isSupervisorOrAbove = currentUser && ['supervisor', 'manager', 'admin'].includes(currentUser.role);
 
 
@@ -138,94 +175,109 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
                   <TabsTrigger value="left">Left</TabsTrigger>
                 </TabsList>
 
-                {['front', 'right', 'back', 'left'].map((side) => (
-                  <TabsContent key={side} value={side} className="space-y-4">
-                    {currentResult && (
-                      <div className="relative">
-                        <div className="relative inline-block">
-                          <img
-                            src={currentResult.imageUrl}
-                            alt={`${side} side`}
-                            className="w-full rounded-lg border"
-                          />
-                          {/* Bounding Boxes */}
-                          <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
-                            {currentResult.boundingBoxes.map((box, index) => (
-                              <g key={index}>
-                                <rect
-                                  x={`${box.x}%`}
-                                  y={`${box.y}%`}
-                                  width={`${box.width}%`}
-                                  height={`${box.height}%`}
-                                  fill="none"
-                                  stroke={getBoundingBoxColor(box.faultType)}
-                                  strokeWidth="3"
-                                  strokeDasharray="5,5"
-                                  opacity="0.9"
-                                />
-                                <text
-                                  x={`${box.x + 1}%`}
-                                  y={`${box.y + 2}%`}
-                                  fill={getBoundingBoxColor(box.faultType)}
-                                  fontSize="14"
-                                  fontWeight="bold"
-                                  style={{
-                                    filter: 'drop-shadow(1px 1px 2px rgba(0,0,0,0.8))',
-                                  }}
-                                >
-                                  {box.faultType} ({Math.round(box.confidence * 100)}%)
-                                </text>
-                              </g>
-                            ))}
-                          </svg>
-                        </div>
+                {['front', 'right', 'back', 'left'].map((side) => {
+                  const sideResult = submission.detectionResults?.find(r => r.side === side);
+                  const sideBoxes = (sideResult?.boundingBoxes ?? []).map(box => normalizeBox(box, imageSizes[side]));
 
-                        {/* Detected Faults List */}
-                        {currentResult.boundingBoxes.length > 0 && (
-                          <div className="mt-4 space-y-2">
-                            <h4 className="font-semibold text-sm">Detected Faults:</h4>
-                            {currentResult.boundingBoxes.map((box, index) => (
-                              <div
-                                key={index}
-                                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div
-                                    className="w-4 h-4 rounded"
-                                    style={{ backgroundColor: getBoundingBoxColor(box.faultType) }}
+                  return (
+                    <TabsContent key={side} value={side} className="space-y-4">
+                      {sideResult ? (
+                        <div className="relative">
+                          <div className="relative inline-block">
+                            <img
+                              src={sideResult.imageUrl}
+                              alt={`${side} side`}
+                              className="w-full rounded-lg border"
+                              onLoad={(e) => {
+                                setImageSizes(prev => ({
+                                  ...prev,
+                                  [side]: {
+                                    width: e.target.naturalWidth,
+                                    height: e.target.naturalHeight,
+                                  },
+                                }));
+                              }}
+                            />
+                            {/* Bounding Boxes */}
+                            <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
+                              {sideBoxes.map((box, index) => (
+                                <g key={index}>
+                                  <rect
+                                    x={`${box.x}%`}
+                                    y={`${box.y}%`}
+                                    width={`${box.width}%`}
+                                    height={`${box.height}%`}
+                                    fill="none"
+                                    stroke={getBoundingBoxColor(box.faultType)}
+                                    strokeWidth="3"
+                                    strokeDasharray="5,5"
+                                    opacity="0.9"
                                   />
-                                  <span className="font-medium">{box.faultType}</span>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <div className="text-sm text-gray-600">
-                                    Confidence: {Math.round(box.confidence * 100)}%
-                                  </div>
-                                  <div className="w-24 bg-gray-200 rounded-full h-2">
-                                    <div
-                                      className="h-2 rounded-full"
-                                      style={{
-                                        width: `${box.confidence * 100}%`,
-                                        backgroundColor: getBoundingBoxColor(box.faultType),
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
+                                  <text
+                                    x={`${box.x + 1}%`}
+                                    y={`${box.y + 2}%`}
+                                    fill={getBoundingBoxColor(box.faultType)}
+                                    fontSize="14"
+                                    fontWeight="bold"
+                                    style={{
+                                      filter: 'drop-shadow(1px 1px 2px rgba(0,0,0,0.8))',
+                                    }}
+                                  >
+                                    {box.faultType} ({Math.round(box.confidence * 100)}%)
+                                  </text>
+                                </g>
+                              ))}
+                            </svg>
                           </div>
-                        )}
 
-                        {currentResult.boundingBoxes.length === 0 && (
-                          <div className="mt-4 p-6 bg-green-50 rounded-lg text-center">
-                            <p className="text-green-700 font-medium">
-                              No faults detected on this side
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </TabsContent>
-                ))}
+                          {sideBoxes.length > 0 ? (
+                            <div className="mt-4 space-y-2">
+                              <h4 className="font-semibold text-sm">Detected Faults:</h4>
+                              {sideBoxes.map((box, index) => (
+                                <div
+                                  key={index}
+                                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div
+                                      className="w-4 h-4 rounded"
+                                      style={{ backgroundColor: getBoundingBoxColor(box.faultType) }}
+                                    />
+                                    <span className="font-medium">{box.faultType}</span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <div className="text-sm text-gray-600">
+                                      Confidence: {Math.round(box.confidence * 100)}%
+                                    </div>
+                                    <div className="w-24 bg-gray-200 rounded-full h-2">
+                                      <div
+                                        className="h-2 rounded-full"
+                                        style={{
+                                          width: `${box.confidence * 100}%`,
+                                          backgroundColor: getBoundingBoxColor(box.faultType),
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-4 p-6 bg-green-50 rounded-lg text-center">
+                              <p className="text-green-700 font-medium">
+                                No faults detected on this side
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-6 bg-gray-50 rounded-lg text-center">
+                          <p className="text-gray-500">No image or detection result available for this side.</p>
+                        </div>
+                      )}
+                    </TabsContent>
+                  );
+                })}
               </Tabs>
             </CardContent>
           </Card>
@@ -253,14 +305,14 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
                   All Detected Faults
                 </h4>
                 <div className="space-y-2">
-                  {submission.detectionResults?.flatMap(r => 
-                    r.boundingBoxes.map(b => b.faultType)
-                  ).filter((v, i, a) => a.indexOf(v) === i).map((fault, index) => (
+                  {filteredFaults.length > 0 ? filteredFaults.map((fault, index) => (
                     <div key={index} className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-orange-600" />
                       <span className="text-sm">{fault}</span>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="text-gray-500 text-sm">No non-feeder pillar faults detected.</div>
+                  )}
                 </div>
               </div>
             </CardContent>

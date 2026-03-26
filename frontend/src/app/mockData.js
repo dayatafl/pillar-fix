@@ -109,7 +109,11 @@ export const createMockMaintenanceItem = (submission, approvalData) => {
     address: submission.address,
     coordinates: submission.coordinates,
     detectionId: submission.id,
-    faults: submission.detectionResults?.flatMap(r => r.boundingBoxes.map(b => b.faultType)) || [],
+    faults: submission.detectionResults?.flatMap(r =>
+      (r.boundingBoxes ?? [])
+        .map(b => String(b.faultType || b.class || b.label || '').trim())
+        .filter(f => f && !/feeder pillar/i.test(f))
+    ) || [],
     severity: approvalData.severity,
     priority: approvalData.priority,
     status: 'Pending',

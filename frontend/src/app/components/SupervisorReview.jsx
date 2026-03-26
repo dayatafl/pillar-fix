@@ -36,7 +36,9 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
   };
 
   const allFaults = submission.detectionResults?.flatMap(r =>
-    r.boundingBoxes.map(b => b.faultType)
+    (r.boundingBoxes ?? [])
+      .map(b => String(b.faultType || b.class || b.label || 'Unknown').trim())
+      .filter(v => v && !/feeder pillar/i.test(v))
   ).filter((v, i, a) => a.indexOf(v) === i) || [];
 
   const totalDetections = submission.detectionResults?.reduce(
