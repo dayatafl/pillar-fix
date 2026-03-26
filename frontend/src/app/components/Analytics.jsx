@@ -7,7 +7,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell,
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList,
 } from 'recharts';
 import api from '@/app/api';
 import L from 'leaflet';
@@ -212,6 +212,7 @@ function CostAnalysisReport({ costAnalysis, savingRatePct, savingRateSource, loa
 function SeverityReport({ severityInsights, severitySummary, loading }) {
   if (loading) return <SkeletonBlock rows={4} />;
   if (!severityInsights?.length) return <p className="text-sm text-gray-400">No severity data available.</p>;
+
   return (
     <div className="space-y-4">
       {severitySummary && (
@@ -232,10 +233,10 @@ function SeverityReport({ severityInsights, severitySummary, loading }) {
                   <span className="text-xs text-gray-400">({item.percentage.toFixed(1)}%)</span>
                 </div>
               </div>
+              {/* Severity share bar only — no location sections */}
               <div className="h-1.5 bg-white/60 rounded-full mb-3 overflow-hidden">
                 <div className="h-full rounded-full" style={{ width: `${item.percentage}%`, backgroundColor: cfg.bar }} />
               </div>
-              <p className="text-xs text-gray-600 leading-relaxed mb-2">{item.analysis}</p>
               <div className="flex items-center gap-1.5">
                 <Zap className="h-3 w-3 text-gray-400 shrink-0" />
                 <span className="text-xs font-medium text-gray-500">{item.urgency}</span>
@@ -252,13 +253,22 @@ function SeverityReport({ severityInsights, severitySummary, loading }) {
 function FaultTypeReport({ faultTypeInsights, faultSummary, loading }) {
   if (loading) return <SkeletonBlock rows={4} />;
   if (!faultTypeInsights?.length) return <p className="text-sm text-gray-400">No fault type data available.</p>;
+
+  // Exclude feeder pillar + normalize casing (rust → Rust)
+  const filtered = faultTypeInsights
+    .filter(item => item.fault_type.toLowerCase() !== 'feeder pillar')
+    .map(item => ({
+      ...item,
+      fault_type: item.fault_type.charAt(0).toUpperCase() + item.fault_type.slice(1).toLowerCase(),
+    }));
+
   return (
     <div className="space-y-4">
       {faultSummary && (
         <p className="text-sm text-gray-600 leading-relaxed border-l-2 border-gray-200 pl-3 italic">{faultSummary}</p>
       )}
       <div className="space-y-2">
-        {faultTypeInsights.map((item, idx) => {
+        {filtered.map((item, idx) => {
           const riskCfg = RISK_CONTRIBUTION_CONFIG[item.risk_contribution] || RISK_CONTRIBUTION_CONFIG.Low;
           return (
             <div key={item.fault_type} className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-sm transition-shadow">
@@ -770,12 +780,20 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
-                <Pie data={severityData} cx="50%" cy="50%"
-                  label={({ name, value }) => (value > 0 ? `${name}: ${value}` : null)}
-                  labelLine={false} outerRadius={100} dataKey="value">
+                <Pie
+                  data={severityData}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={100}
+                  dataKey="value"
+                  labelLine={false}
+                  label={({ name, value, percent }) =>
+                    value > 0 ? `${name}: ${value} (${(percent * 100).toFixed(1)}%)` : null
+                  }
+                >
                   {severityData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(value, name) => [`${value} pillars`, name]} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
