@@ -129,7 +129,7 @@ class SeverityInsight(BaseModel):
     level: str        = Field(description="Severity level: Critical | High | Medium | Low")
     count: int        = Field(description="Number of pillars at this severity level")
     percentage: float = Field(description="Percentage share of total pillars (0-100)")
-    analysis: str     = Field(description="1-2 sentence analysis of this severity tier and its implications")
+    analysis: str     = Field(description="1-2 sentence analysis of this severity tier's structural and maintenance implications only. Do NOT mention specific localities, area names, or place names.")
     urgency: str      = Field(description="Recommended response timeframe e.g. Within 24 hours")
 
 
@@ -217,7 +217,7 @@ COST ANALYSIS (cost_analysis) — required, full deep analysis
 - cost_summary: 2-3 sentences on total spend, biggest cost driver, and financial outlook.
   Always mention saving_rate_pct and saving_rate_source from stats.
 
-SEVERITY INSIGHTS — one entry per level in severity_distribution.
+SEVERITY INSIGHTS — Focus strictly on structural/maintenance implications of this severity level. Never reference specific localities, area names, or place names. Keep it tier-focused only.
 If empty, produce one placeholder entry.
 percentage = (count / total_approved_tasks) x 100, 1 decimal.
 Urgency: Critical=Within 24-48 hours, High=Within 1 week, Medium=Within 1 month, Low=Scheduled next quarter.
@@ -1009,18 +1009,30 @@ _insights_cache: dict | None = None
 
 
 def _build_insights_response(stats: dict, report: AnalyticsInsightsReport) -> dict:
-    """Merge AI YearProjection entries into the fixed 8-point chart series."""
     approved_tasks_cost = stats.get("total_cost_rm", 0)
+    saving_rate = stats.get("saving_rate", 0.35)
 
-    # Build lookup keyed by year string — Gemini returns YearProjection objects
-    proj_lookup: dict[str, YearProjection] = {entry.year: entry for entry in report.cost_projection}
+    # Proj lookup keyed by year string
+    proj_lookup = {entry.year: entry for entry in report.cost_projection}
 
-    chart_series = [
-        {"year": "2023", "actual": 446250.0,                      "projected": None, "preventive": None, "is_mock": True},
-        {"year": "2024", "actual": 637500.0,                      "projected": None, "preventive": None, "is_mock": True},
-        {"year": "2025", "actual": 765000.0,                      "projected": None, "preventive": None, "is_mock": True},
-        {"year": "2026", "actual": round(approved_tasks_cost, 2), "projected": None, "preventive": None, "is_mock": False},
+    # Historical actuals with projected = actual and preventive = actual * (1 - saving_rate)
+    historical = [
+        ("2023", 446250),
+        ("2024", 637500),
+        ("2025", 765000),
+        ("2026", round(approved_tasks_cost, 2)),
     ]
+
+    chart_series = []
+    for yr, actual in historical:
+        chart_series.append({
+            "year":       yr,
+            "actual":     actual,
+            "projected":  actual,
+            "preventive": round(actual * (1 - saving_rate), 2),
+            "is_mock":    yr != "2026",
+        })
+
     for yr in ["2027", "2028", "2029", "2030"]:
         entry = proj_lookup.get(yr)
         chart_series.append({
@@ -1031,16 +1043,16 @@ def _build_insights_response(stats: dict, report: AnalyticsInsightsReport) -> di
             "is_mock":    False,
         })
 
-    potential_savings = round(sum(
+    potential_savings = sum(
         (e["projected"] or 0) - (e["preventive"] or 0)
         for e in chart_series if e["projected"] is not None
-    ), 2)
+    )
 
     return {
         "stats":             stats,
         "insight":           report.insight,
         "riskLevel":         report.risk_level,
-        "potentialSavings":  potential_savings,
+        "potentialSavings":  round(potential_savings, 2),
         "costProjection":    chart_series,
         "costAnalysis":      report.cost_analysis.model_dump(),
         "severityInsights":  [s.model_dump() for s in report.severity_insights],
