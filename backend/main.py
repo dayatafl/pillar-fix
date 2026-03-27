@@ -32,7 +32,7 @@ models.Base.metadata.create_all(bind=engine)
 
 INFERENCE_URL = "https://pillarfix-inference-ftvjv.ondigitalocean.app/inspect"
 
-# Historical yearly actuals (mock / known data for 2023-2025)
+# Historical yearly actuals — 2023-2025 only. 2026 comes from live DB.
 HISTORICAL_YEARLY_COSTS = {
     "2023": 446250.0,
     "2024": 637500.0,
@@ -256,6 +256,76 @@ _analytics_chain = _build_analytics_chain()
 
 
 # ---------------------------------------------------------------------------
+# Shared projection helper — used by both chart-data and _aggregate_stats
+# ---------------------------------------------------------------------------
+
+def _compute_projections(total_cost_2026: float, saving_rate: float) -> tuple[list[dict], float]:
+    """
+    Compute 2027-2030 projections from historical data only (2023-2025).
+    2026 live data is used as base year for projection but NOT for trend calculation.
+    Returns (projection_years, trend_multiplier).
+    projection_years = [{"year": "2027", "projected": x, "preventive": y}, ...]
+    """
+    # Calculate trend from historical data only (2023-2025), not including live 2026
+    hist_values = [
+        HISTORICAL_YEARLY_COSTS["2023"],
+        HISTORICAL_YEARLY_COSTS["2024"],
+        HISTORICAL_YEARLY_COSTS["2025"],
+    ]
+    valid_hist = [v for v in hist_values if v > 0]
+    if len(valid_hist) >= 2:
+        raw_growth       = (valid_hist[-1] / valid_hist[0]) ** (1 / (len(valid_hist) - 1))
+        trend_multiplier = max(1.03, min(1.12, raw_growth))
+    else:
+        trend_multiplier = 1.06
+
+    # Base is 2026 actual; project forward from there using historical trend
+    base = total_cost_2026 if total_cost_2026 > 0 else HISTORICAL_YEARLY_COSTS["2025"]
+    projection_years = []
+    for i, yr in enumerate(["2027", "2028", "2029", "2030"]):
+        projected  = round(base * (trend_multiplier ** (i + 1)), 2)
+        preventive = round(projected * (1 - saving_rate), 2)
+        projection_years.append({"year": yr, "projected": projected, "preventive": preventive})
+
+    return projection_years, trend_multiplier
+
+
+def _compute_saving_rate(approved_tasks: list) -> tuple[float, str]:
+    """Derive saving rate from completed task data, falling back to industry default."""
+    INDUSTRY_DEFAULT = 0.35
+    MIN_TASKS        = 20
+
+    completed     = [t for t in approved_tasks if t.task_status == "Completed" and t.cost_estimation is not None]
+    preventive_px = [t for t in completed if t.severity_validation in ("Low", "Medium")]
+    reactive_px   = [t for t in completed if t.severity_validation in ("High", "Critical")]
+
+    avg_p = (sum(t.cost_estimation for t in preventive_px) / len(preventive_px)) if preventive_px else None
+    avg_r = (sum(t.cost_estimation for t in reactive_px)   / len(reactive_px))   if reactive_px   else None
+
+    if avg_p is not None and avg_r is not None and avg_r > 0:
+        raw_rate   = max(0.0, min(0.70, 1.0 - (avg_p / avg_r)))
+        confidence = min(1.0, len(completed) / MIN_TASKS)
+        rate       = (confidence * raw_rate) + ((1 - confidence) * INDUSTRY_DEFAULT)
+        source     = (
+            f"derived ({len(completed)} completed tasks, {round(confidence*100)}% confidence, "
+            f"blended with {round((1-confidence)*100)}% industry default)"
+        )
+    else:
+        rate = INDUSTRY_DEFAULT
+        n    = len(completed)
+        if n == 0:
+            source = "industry default (no completed tasks yet)"
+        elif not preventive_px:
+            source = f"industry default (no Low/Medium completed tasks yet — {n} High/Critical only)"
+        elif not reactive_px:
+            source = f"industry default (no High/Critical completed tasks yet — {n} Low/Medium only)"
+        else:
+            source = "industry default (fallback)"
+
+    return rate, source
+
+
+# ---------------------------------------------------------------------------
 # Analytics stats aggregation
 # ---------------------------------------------------------------------------
 
@@ -310,61 +380,23 @@ def _aggregate_stats(db: Session) -> dict:
         if all_detections else 0.0
     )
 
-    # ── Saving rate ──────────────────────────────────────────────────────────
-    INDUSTRY_DEFAULT_SAVING_RATE = 0.35
-    MIN_TASKS_FOR_FULL_CONFIDENCE = 20
+    saving_rate, saving_rate_source = _compute_saving_rate(approved_tasks)
 
-    completed_tasks  = [t for t in approved_tasks if t.task_status == "Completed" and t.cost_estimation is not None]
-    preventive_proxy = [t for t in completed_tasks if t.severity_validation in ("Low", "Medium")]
-    reactive_proxy   = [t for t in completed_tasks if t.severity_validation in ("High", "Critical")]
-
-    avg_preventive_cost = (sum(t.cost_estimation for t in preventive_proxy) / len(preventive_proxy)) if preventive_proxy else None
-    avg_reactive_cost   = (sum(t.cost_estimation for t in reactive_proxy)   / len(reactive_proxy))   if reactive_proxy   else None
-
-    if avg_preventive_cost is not None and avg_reactive_cost is not None and avg_reactive_cost > 0:
-        raw_saving_rate = max(0.0, min(0.70, 1.0 - (avg_preventive_cost / avg_reactive_cost)))
-        n_completed     = len(completed_tasks)
-        confidence      = min(1.0, n_completed / MIN_TASKS_FOR_FULL_CONFIDENCE)
-        saving_rate     = (confidence * raw_saving_rate) + ((1 - confidence) * INDUSTRY_DEFAULT_SAVING_RATE)
-        saving_rate_source = (
-            f"derived ({n_completed} completed tasks, {round(confidence*100)}% confidence, "
-            f"blended with {round((1-confidence)*100)}% industry default)"
-        )
-    else:
-        saving_rate = INDUSTRY_DEFAULT_SAVING_RATE
-        n_completed = len(completed_tasks)
-        if n_completed == 0:
-            saving_rate_source = "industry default (no completed tasks yet)"
-        elif not preventive_proxy:
-            saving_rate_source = f"industry default (no Low/Medium completed tasks yet — {n_completed} High/Critical only)"
-        elif not reactive_proxy:
-            saving_rate_source = f"industry default (no High/Critical completed tasks yet — {n_completed} Low/Medium only)"
-        else:
-            saving_rate_source = "industry default (fallback)"
-
-    # ── Yearly cost series ───────────────────────────────────────────────────
+    # Yearly cost series — 2026 is live from DB
     yearly_costs = {**HISTORICAL_YEARLY_COSTS, "2026": round(total_cost, 2)}
 
-    # ── 4-year forward projection (2027-2030) ────────────────────────────────
-    hist_values = [HISTORICAL_YEARLY_COSTS["2023"], HISTORICAL_YEARLY_COSTS["2024"],
-                   HISTORICAL_YEARLY_COSTS["2025"], total_cost]
-    valid_hist  = [v for v in hist_values if v > 0]
-    if len(valid_hist) >= 2:
-        raw_growth       = (valid_hist[-1] / valid_hist[0]) ** (1 / (len(valid_hist) - 1))
-        trend_multiplier = max(1.03, min(1.12, raw_growth))
-    else:
-        trend_multiplier = 1.06
-
-    base_year_cost = total_cost if total_cost > 0 else HISTORICAL_YEARLY_COSTS["2025"]
-    projection_years: list[dict] = []
-    for i, yr in enumerate(["2026", "2027", "2028", "2029", "2030"]):
-        projected  = round(base_year_cost * (trend_multiplier ** (i + 1)), 2)
-        preventive = round(projected * (1 - saving_rate), 2)
-        projection_years.append({"year": yr, "projected": projected, "preventive": preventive})
+    # 2027-2030 projections only
+    projection_years, trend_multiplier = _compute_projections(total_cost, saving_rate)
 
     projected_4yr_total  = round(sum(p["projected"]  for p in projection_years), 2)
     preventive_4yr_total = round(sum(p["preventive"] for p in projection_years), 2)
     potential_savings    = round(projected_4yr_total - preventive_4yr_total, 2)
+
+    completed_tasks  = [t for t in approved_tasks if t.task_status == "Completed" and t.cost_estimation is not None]
+    preventive_proxy = [t for t in completed_tasks if t.severity_validation in ("Low", "Medium")]
+    reactive_proxy   = [t for t in completed_tasks if t.severity_validation in ("High", "Critical")]
+    avg_preventive_cost = (sum(t.cost_estimation for t in preventive_proxy) / len(preventive_proxy)) if preventive_proxy else None
+    avg_reactive_cost   = (sum(t.cost_estimation for t in reactive_proxy)   / len(reactive_proxy))   if reactive_proxy   else None
 
     return {
         "snapshot_date":               datetime.utcnow().strftime("%Y-%m-%d"),
@@ -412,8 +444,9 @@ async def _call_inference_api(image_url: str) -> dict:
         return infer_resp.json()
 
 
-def _parse_inference_result(result: dict, image_index: int) -> list[dict]:
-    """Map inference API predictions to Detection model fields. Skips Feeder Pillar wrapper."""
+def _parse_inference_result(result: dict, image_index: int) -> tuple[list[dict], float]:
+    """Map inference API predictions to Detection model fields. Skips Feeder Pillar wrapper.
+    Returns (detections, total_estimated_cost_rm) for this image."""
     detections = []
     for pred in result.get("predictions", []):
         if pred.get("class") == "Feeder Pillar":
@@ -427,22 +460,27 @@ def _parse_inference_result(result: dict, image_index: int) -> list[dict]:
             "width":            pred["width"],
             "height":           pred["height"],
         })
-    return detections
+    cost = float(result.get("total_estimated_cost_rm") or 0.0)
+    return detections, cost
 
 
-async def _run_inference_on_images(signed_urls: list[str]) -> list[dict]:
-    """Run inference on all images concurrently. Failed images are logged and skipped."""
+async def _run_inference_on_images(signed_urls: list[str]) -> tuple[list[dict], float]:
+    """Run inference on all images concurrently. Failed images are logged and skipped.
+    Returns (detections, total_estimated_cost_rm) summed across all images."""
     results = await asyncio.gather(
         *[_call_inference_api(url) for url in signed_urls],
         return_exceptions=True,
     )
     detections: list[dict] = []
+    total_cost: float = 0.0
     for i, result in enumerate(results):
         if isinstance(result, Exception):
             print(f"[inference] image {i + 1} failed: {result}")
             continue
-        detections.extend(_parse_inference_result(result, image_index=i + 1))
-    return detections
+        image_detections, image_cost = _parse_inference_result(result, image_index=i + 1)
+        detections.extend(image_detections)
+        total_cost += image_cost
+    return detections, round(total_cost, 2)
 
 
 def _persist_detections(db: Session, photo_id: str, task_id: int, detections: list[dict]) -> None:
@@ -732,7 +770,7 @@ async def submit_task(task_id: int, data: TaskSubmit, db: db_dependency):
     db.commit()
 
     signed_urls = sign_image_list(gcs_urls)
-    detections  = await _run_inference_on_images(signed_urls)
+    detections, total_estimated_cost = await _run_inference_on_images(signed_urls)
 
     photo_id = str(uuid.uuid4())
     db.add(Photo(
@@ -741,6 +779,7 @@ async def submit_task(task_id: int, data: TaskSubmit, db: db_dependency):
             "status": "Fault detected" if detections else "No Fault",
             "total_detection": len(detections),
             "detections": detections,
+            "total_estimated_cost_rm": total_estimated_cost,
         },
         created_date=datetime.utcnow(),
     ))
@@ -752,6 +791,7 @@ async def submit_task(task_id: int, data: TaskSubmit, db: db_dependency):
         "message": "Task submitted and detection completed",
         "photo_id": photo_id,
         "overallRisk": risk,
+        "estimatedCost": total_estimated_cost,
         "detectionResults": [
             {
                 "imageUrl": signed_urls[i], "side": sides[i], "overallRisk": risk,
@@ -784,7 +824,7 @@ async def get_detection(task_id: int, db: db_dependency):
     if existing_boxes:
         boxes = existing_boxes
     else:
-        detections = await _run_inference_on_images(images)
+        detections, _ = await _run_inference_on_images(images)
         _persist_detections(db, photo.photo_id, task_id, detections)
         boxes = db.query(Detection).filter(Detection.photo_id == photo.photo_id).all()
 
@@ -883,6 +923,7 @@ async def get_submissions(db: db_dependency):
             "detectionStatus": "Completed", "detectionResults": det_results,
             "overallRisk": risk, "validationStatus": r.validation_status or "Pending",
             "sentToSupervisor": True, "validated": is_validated, "approvalData": approval_data,
+            "estimatedCost": (photo.inference or {}).get("total_estimated_cost_rm") if photo else None,
         })
     return result
 
@@ -981,23 +1022,43 @@ async def get_maintenance(db: db_dependency):
 @app.get("/analytics/chart-data")
 async def get_analytics_chart_data(db: db_dependency):
     """
-    Returns the 8-point yearly chart (2023-2030) immediately with no AI call.
-    2023-2025 are hardcoded historical actuals; 2026 is live from DB.
-    Projected/preventive slots are null until /analytics/insights is called.
+    Returns the full 8-point yearly chart (2023-2030) immediately with no AI call.
+    Historical actuals are 2023-2026. Projections for 2027-2030 are computed
+    from the historical trend so the chart is fully populated without waiting for AI.
     """
     approved_tasks  = db.query(Task).filter(Task.validation_status == "Approved").all()
     total_cost_2026 = round(sum(t.cost_estimation or 0 for t in approved_tasks), 2)
 
-    chart = [
-        {"year": "2023", "actual": 446250.0,       "projected": None, "preventive": None, "is_mock": True},
-        {"year": "2024", "actual": 637500.0,       "projected": None, "preventive": None, "is_mock": True},
-        {"year": "2025", "actual": 765000.0,       "projected": None, "preventive": None, "is_mock": True},
-        {"year": "2026", "actual": total_cost_2026, "projected": None, "preventive": None, "is_mock": False},
-        {"year": "2027", "actual": None,            "projected": None, "preventive": None, "is_mock": False},
-        {"year": "2028", "actual": None,            "projected": None, "preventive": None, "is_mock": False},
-        {"year": "2029", "actual": None,            "projected": None, "preventive": None, "is_mock": False},
-        {"year": "2030", "actual": None,            "projected": None, "preventive": None, "is_mock": False},
+    saving_rate, _ = _compute_saving_rate(approved_tasks)
+    projection_years, _ = _compute_projections(total_cost_2026, saving_rate)
+    proj_lookup = {p["year"]: p for p in projection_years}
+
+    historical = [
+        ("2023", HISTORICAL_YEARLY_COSTS["2023"], True),
+        ("2024", HISTORICAL_YEARLY_COSTS["2024"], True),
+        ("2025", HISTORICAL_YEARLY_COSTS["2025"], True),
+        ("2026", total_cost_2026,                 False),
     ]
+    chart = [
+        {
+            "year":       yr,
+            "actual":     actual,
+            "projected":  actual,
+            "preventive": round(actual * (1 - saving_rate), 2),
+            "is_mock":    is_mock,
+        }
+        for yr, actual, is_mock in historical
+    ]
+    for yr in ["2027", "2028", "2029", "2030"]:
+        p = proj_lookup[yr]
+        chart.append({
+            "year":       yr,
+            "actual":     None,
+            "projected":  p["projected"],
+            "preventive": p["preventive"],
+            "is_mock":    False,
+        })
+
     return {"chart": chart, "total_cost_2026": total_cost_2026}
 
 
@@ -1009,28 +1070,26 @@ _insights_cache: dict | None = None
 
 
 def _build_insights_response(stats: dict, report: AnalyticsInsightsReport) -> dict:
-    approved_tasks_cost = stats.get("total_cost_rm", 0)
-    saving_rate = stats.get("saving_rate", 0.35)
+    saving_rate      = stats.get("saving_rate", 0.35)
+    total_cost_2026  = stats.get("total_cost_rm", 0)
 
-    # Proj lookup keyed by year string
     proj_lookup = {entry.year: entry for entry in report.cost_projection}
 
-    # Historical actuals with projected = actual and preventive = actual * (1 - saving_rate)
     historical = [
-        ("2023", 446250),
-        ("2024", 637500),
-        ("2025", 765000),
-        ("2026", round(approved_tasks_cost, 2)),
+        ("2023", HISTORICAL_YEARLY_COSTS["2023"], True),
+        ("2024", HISTORICAL_YEARLY_COSTS["2024"], True),
+        ("2025", HISTORICAL_YEARLY_COSTS["2025"], True),
+        ("2026", total_cost_2026,                 False),
     ]
 
     chart_series = []
-    for yr, actual in historical:
+    for yr, actual, is_mock in historical:
         chart_series.append({
             "year":       yr,
             "actual":     actual,
             "projected":  actual,
             "preventive": round(actual * (1 - saving_rate), 2),
-            "is_mock":    yr != "2026",
+            "is_mock":    is_mock,
         })
 
     for yr in ["2027", "2028", "2029", "2030"]:
@@ -1043,16 +1102,17 @@ def _build_insights_response(stats: dict, report: AnalyticsInsightsReport) -> di
             "is_mock":    False,
         })
 
-    potential_savings = sum(
+    # Potential savings only from future projection years (2027-2030)
+    potential_savings = round(sum(
         (e["projected"] or 0) - (e["preventive"] or 0)
-        for e in chart_series if e["projected"] is not None
-    )
+        for e in chart_series if e["actual"] is None and e["projected"] is not None
+    ), 2)
 
     return {
         "stats":             stats,
         "insight":           report.insight,
         "riskLevel":         report.risk_level,
-        "potentialSavings":  round(potential_savings, 2),
+        "potentialSavings":  potential_savings,
         "costProjection":    chart_series,
         "costAnalysis":      report.cost_analysis.model_dump(),
         "severityInsights":  [s.model_dump() for s in report.severity_insights],

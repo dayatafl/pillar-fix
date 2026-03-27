@@ -178,6 +178,7 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
                 {['front', 'right', 'back', 'left'].map((side) => {
                   const sideResult = submission.detectionResults?.find(r => r.side === side);
                   const sideBoxes = (sideResult?.boundingBoxes ?? []).map(box => normalizeBox(box, imageSizes[side]));
+                  const sideFaultBoxes = sideBoxes.filter(box => !isFeederPillar(box.faultType));
 
                   return (
                     <TabsContent key={side} value={side} className="space-y-4">
@@ -230,10 +231,10 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
                             </svg>
                           </div>
 
-                          {sideBoxes.length > 0 ? (
+                          {sideFaultBoxes.length > 0 ? (
                             <div className="mt-4 space-y-2">
                               <h4 className="font-semibold text-sm">Detected Faults:</h4>
-                              {sideBoxes.map((box, index) => (
+                              {sideFaultBoxes.map((box, index) => (
                                 <div
                                   key={index}
                                   className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"

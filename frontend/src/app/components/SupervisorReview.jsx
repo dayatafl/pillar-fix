@@ -20,7 +20,9 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
 
   const aiOverallRisk = submission.overallRisk || submission.approvalData?.severity || 'Medium';
   const [estimatedCost, setEstimatedCost] = useState(
-    submission.approvalData?.estimatedCost?.toString() || '5000'
+    submission.approvalData?.estimatedCost?.toString()
+    ?? submission.estimatedCost?.toString()
+    ?? ''
   );
   const [notes, setNotes] = useState(submission.approvalData?.remarks || '');
   const [rejectReason, setRejectReason] = useState(submission.rejectionReason || '');
@@ -236,7 +238,12 @@ export function SupervisorReview({ submission, currentUser, onBack, onApprove, o
                 </div>
 
                 <div>
-                  <Label htmlFor="cost" className="block mb-2">Estimated Cost (RM)</Label>
+                  <Label htmlFor="cost" className="block mb-2">
+                    Estimated Cost (RM)
+                    {submission.estimatedCost != null && !submission.approvalData?.estimatedCost && (
+                      <span className="ml-2 text-xs font-normal text-blue-600">AI suggested</span>
+                    )}
+                  </Label>
                   <input
                     id="cost"
                     type="number"
