@@ -33,6 +33,16 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
     return matchesStatus;
   });
 
+  const sortedFilteredItems = [...filteredItems].sort((a, b) => {
+    const approvedAtDiff = new Date(b.approvedAt).getTime() - new Date(a.approvedAt).getTime();
+    if (!Number.isNaN(approvedAtDiff) && approvedAtDiff !== 0) return approvedAtDiff;
+
+    const scheduledDateDiff = new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+    if (!Number.isNaN(scheduledDateDiff) && scheduledDateDiff !== 0) return scheduledDateDiff;
+
+    return String(a.pillarId).localeCompare(String(b.pillarId));
+  });
+
   const stats = {
     total: visibleItems.length,
     pending: visibleItems.filter(i => i.status === 'Pending' || i.status === 'Approved').length,
@@ -172,7 +182,7 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
 
       {/* Maintenance Items */}
       <div className="space-y-4">
-        {filteredItems.length === 0 ? (
+        {sortedFilteredItems.length === 0 ? (
           <Card>
             <CardContent>
               <div className="py-4 space-y-3">
@@ -183,7 +193,7 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
             </CardContent>
           </Card>
         ) : (
-          filteredItems.map((item) => (
+          sortedFilteredItems.map((item) => (
             <Card key={item.id} className="hover:shadow-lg transition-shadow">
               <CardContent className="p-6">
                 <div className="md:hidden space-y-3">
@@ -274,7 +284,7 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
                       {item.scheduledDate && (
                         <div className="flex items-center gap-2 text-sm">
                           <Calendar className="h-4 w-4 text-gray-600" />
-                          <span className="text-gray-600">Scheduled:</span>
+                          <span className="text-gray-600">Due Date:</span>
                           <span className="font-medium">
                             {new Date(item.scheduledDate).toLocaleDateString()}
                           </span>
