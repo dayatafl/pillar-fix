@@ -18,13 +18,10 @@ export function SupervisorValidation({ submissions, onReview }) {
     window.scrollTo(0, 0);
   }, []);
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString('en-MY', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatDateOnly = (dateString) => {
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-GB');
   };
 
   // Single source of truth for a submission's validation status.
@@ -82,6 +79,16 @@ export function SupervisorValidation({ submissions, onReview }) {
   const filteredSubmissions = submissions.filter(submission => {
     if (statusFilter === 'all') return true;
     return getValidationStatus(submission) === statusFilter;
+  });
+
+  const sortedFilteredSubmissions = [...filteredSubmissions].sort((a, b) => {
+    const submittedAtDiff = new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
+    if (!Number.isNaN(submittedAtDiff) && submittedAtDiff !== 0) return submittedAtDiff;
+
+    const dueDateDiff = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    if (!Number.isNaN(dueDateDiff) && dueDateDiff !== 0) return dueDateDiff;
+
+    return String(a.pillarId).localeCompare(String(b.pillarId));
   });
 
   return (
@@ -190,14 +197,14 @@ export function SupervisorValidation({ submissions, onReview }) {
       </div>
 
       <div className="space-y-3">
-        {filteredSubmissions.length === 0 ? (
+        {sortedFilteredSubmissions.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             {submissions.length === 0
               ? 'No submissions pending review'
               : `No submissions with "${statusFilter}" status`}
           </div>
         ) : (
-          filteredSubmissions.map((submission) => {
+          sortedFilteredSubmissions.map((submission) => {
             const faultCount =
               submission.detectionResults?.reduce(
                 (sum, r) => sum + r.boundingBoxes.length,
@@ -220,6 +227,10 @@ export function SupervisorValidation({ submissions, onReview }) {
 
                   <p className="text-sm text-gray-600 leading-relaxed">{submission.address}</p>
 
+                  <p className="text-[11px] text-gray-400 mt-2">
+                    Submit: {formatDateOnly(submission.submittedAt)} | Due: {formatDateOnly(submission.dueDate)}
+                  </p>
+
                   <div className="grid grid-cols-2 gap-1 w-20 h-20">
                     {submission.images.slice(0, 4).map((img, idx) => (
                       <div key={idx} className="rounded overflow-hidden bg-gray-100">
@@ -233,10 +244,8 @@ export function SupervisorValidation({ submissions, onReview }) {
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t">
-                    <p className="text-xs text-gray-500">
-                      Submitted: {formatDate(submission.submittedAt)}
-                    </p>
                     <p className="text-xs text-gray-500">{submission.submittedBy}</p>
+                    <p className="text-xs text-gray-500">{faultCount} fault{faultCount !== 1 ? 's' : ''}</p>
                   </div>
 
                   <Button
@@ -271,9 +280,11 @@ export function SupervisorValidation({ submissions, onReview }) {
                         {getValidationBadge(validationStatus)}
                       </div>
                       <p className="text-sm text-gray-600">{submission.address}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Submitted: {formatDate(submission.submittedAt)} •{' '}
-                        {submission.submittedBy}
+                      <p className="text-[11px] text-gray-400 mt-2">
+                        Submit: {formatDateOnly(submission.submittedAt)} | Due: {formatDateOnly(submission.dueDate)}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {submission.submittedBy} • {faultCount} fault{faultCount !== 1 ? 's' : ''}
                       </p>
                     </div>
                   </div>

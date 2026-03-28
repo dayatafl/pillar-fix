@@ -512,8 +512,13 @@ def compute_overall_risk(detections: list[dict]) -> str:
 @app.post("/users/login")
 async def login_user(login: LoginRequest, db: db_dependency):
     user = db.query(User).filter(User.email == login.email).first()
+
     if not user or login.password != user.password:
         return {"exists": False}
+    
+    if not user.isActive:
+        raise HTTPException(403, "This account has been deactivated. Please contact your administrator.")
+    
     return {
         "exists": True,
         "user": {
