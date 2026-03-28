@@ -7,7 +7,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList,
+  Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList, Label,
 } from 'recharts';
 import api from '@/app/api';
 import L from 'leaflet';
@@ -121,7 +121,7 @@ function CostAnalysisReport({ costAnalysis, savingRatePct, savingRateSource, loa
 
   const localityChartData = (costAnalysis.locality_breakdown || [])
     .filter(l => l.locality !== 'Unknown' || l.total_cost > 0)
-    .map(l => ({ name: l.locality, cost: l.total_cost, avg: l.avg_cost }))
+    .map(l => ({ name: l.locality, cost: l.total_cost, percentage: l.cost_share, avg: l.avg_cost }))
     .slice(0, 6);
 
   return (
@@ -175,33 +175,18 @@ function CostAnalysisReport({ costAnalysis, savingRatePct, savingRateSource, loa
             <BarChart data={localityChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} width={60} tickFormatter={v => `RM${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={v => [`RM ${v.toLocaleString()}`, 'Total Cost']} />
-              <Bar dataKey="cost" fill="#3B82F6" name="Total Cost" radius={[4, 4, 0, 0]} />
+              <YAxis tick={{ fontSize: 11 }} width={60} tickFormatter={v => `${v.toFixed(1)}%`} />
+              <Tooltip formatter={(value, name, props) => {
+                if (name === 'percentage') {
+                  const cost = props.payload.cost;
+                  return [`RM ${cost.toLocaleString()} (${value.toFixed(1)}%)`, 'Cost Share'];
+                }
+                return [value, name];
+              }} />
+              <Bar dataKey="percentage" fill="#3B82F6" name="Cost Share" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
 
-          <div className="mt-3 space-y-2">
-            {costAnalysis.locality_breakdown.map((loc, i) => (
-              <div key={i} className="rounded-lg border border-gray-100 bg-white p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-3.5 w-3.5 text-gray-400" />
-                    <span className="text-sm font-semibold text-gray-800">{loc.locality}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <span>{loc.task_count} tasks</span>
-                    <span className="font-medium text-gray-700">RM {(loc.total_cost || 0).toLocaleString()}</span>
-                    <span className="text-gray-400">({(loc.cost_share || 0).toFixed(1)}%)</span>
-                  </div>
-                </div>
-                <div className="h-1 bg-gray-100 rounded-full mb-1.5 overflow-hidden">
-                  <div className="h-full bg-blue-400 rounded-full" style={{ width: `${Math.min(loc.cost_share || 0, 100)}%` }} />
-                </div>
-                <p className="text-xs text-gray-500">{loc.assessment}</p>
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>
@@ -282,10 +267,7 @@ function FaultTypeReport({ faultTypeInsights, faultSummary, loading }) {
                   <span className="text-xs text-gray-500">{item.occurrences}×</span>
                 </div>
               </div>
-              <div className="mb-2">
-                <span className="text-xs text-gray-400">AI Confidence</span>
-                <ConfidenceBar value={item.avg_confidence} />
-              </div>
+
               <div className="flex items-start gap-1.5 mt-2">
                 <Wrench className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-gray-600 leading-relaxed">{item.recommendation}</p>
@@ -439,6 +421,13 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     });
     return acc;
   }, []);
+
+  // Calculate total and add percentages to fault data
+  const totalFaults = faultTypeData.reduce((sum, item) => sum + item.value, 0);
+  const faultTypeDataWithPercentage = faultTypeData.map(item => ({
+    ...item,
+    percentage: totalFaults > 0 ? ((item.value / totalFaults) * 100).toFixed(1) : 0,
+  }));
 
   const totalCost = maintenanceItems.reduce((sum, item) => sum + (item.estimatedCost || 0), 0);
   const avgCost   = maintenanceItems.length > 0 ? totalCost / maintenanceItems.length : 0;
@@ -802,14 +791,24 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
           <CardHeader className="pb-2"><CardTitle>Pillar Fault Type Frequency</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={isMobile ? 240 : 300}>
-              <BarChart data={faultTypeData} margin={isMobile ? { top: 8, right: 8, left: 0, bottom: 0 } : undefined}>
+              <BarChart data={faultTypeDataWithPercentage} margin={isMobile ? { top: 8, right: 8, left: 0, bottom: 0 } : undefined}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" angle={isMobile ? -20 : -45} textAnchor="end"
                   height={isMobile ? 60 : 100} tick={{ fontSize: isMobile ? 10 : 12 }}
                   tickFormatter={v => isMobile && typeof v === 'string' && v.length > 14 ? `${v.slice(0, 14)}…` : v} />
                 <YAxis tick={{ fontSize: isMobile ? 11 : 12 }} width={isMobile ? 42 : undefined} />
-                <Tooltip contentStyle={isMobile ? { fontSize: 12, padding: '8px 10px', borderRadius: 10 } : undefined} />
-                <Bar dataKey="value" fill="#3B82F6" name="Occurrences" />
+                <Tooltip contentStyle={isMobile ? { fontSize: 12, padding: '8px 10px', borderRadius: 10 } : undefined}
+                  formatter={(value, name, props) => {
+                    if (name === 'value') {
+                      const percentage = props.payload.percentage;
+                      return [`${value} (${percentage}%)`, 'Occurrences'];
+                    }
+                    return [value, name];
+                  }}
+                />
+                <Bar dataKey="value" fill="#3B82F6" name="Occurrences" radius={[4, 4, 0, 0]}>
+                  <Label dataKey="percentage" position="top" formatter={v => `${v}%`} fontSize={isMobile ? 10 : 11} fill="#374151" />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
