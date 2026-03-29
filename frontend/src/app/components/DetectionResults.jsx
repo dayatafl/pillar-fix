@@ -1,55 +1,29 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, AlertTriangle, Send, Check, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Send, Check, X } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Badge } from '@/app/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
 
-// ─── Standalone Lightbox rendered via React portal directly onto document.body ──
-// This ensures it is NEVER clipped by any parent's z-index / overflow / transform.
 function Lightbox({ open, onClose, imageUrl, label, boxes, getBoundingBoxColor }) {
-  const [zoom, setZoom] = useState(1);
-  const MIN_ZOOM = 1;
-  const MAX_ZOOM = 4;
-
-  useEffect(() => {
-    if (open) setZoom(1);
-  }, [open, imageUrl]);
-
   useEffect(() => {
     if (!open) return;
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === '=' || e.key === '+') setZoom(z => Math.min(MAX_ZOOM, parseFloat((z + 0.5).toFixed(1))));
-      if (e.key === '-') setZoom(z => Math.max(MIN_ZOOM, parseFloat((z - 0.5).toFixed(1))));
-    };
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-    };
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
   }, [open, onClose]);
 
   if (!open || !imageUrl) return null;
 
-  const handleCycleZoom = (e) => {
-    e.stopPropagation();
-    setZoom(z => (z < 2 ? 2 : z < 3 ? 3 : z < 4 ? 4 : 1));
-  };
-
   const content = (
     <div
       style={{
-        position: 'fixed',
-        top: 0, left: 0, right: 0, bottom: 0,
-        width: '100vw', height: '100vh',
-        zIndex: 2147483647, // max possible z-index
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        width: '100vw', height: '100vh', zIndex: 2147483647,
         backgroundColor: 'rgba(0,0,0,0.93)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
         boxSizing: 'border-box',
       }}
       onClick={onClose}
@@ -67,82 +41,41 @@ function Lightbox({ open, onClose, imageUrl, label, boxes, getBoundingBoxColor }
         <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
           {label}
         </span>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Zoom out */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(MIN_ZOOM, parseFloat((z - 0.5).toFixed(1)))); }}
-            style={btnStyle(zoom <= MIN_ZOOM)}
-            title="Zoom out (−)"
-          >
-            <ZoomOut size={15} />
-          </button>
-
-          <span style={{ color: '#fff', fontSize: 12, minWidth: 34, textAlign: 'center', userSelect: 'none' }}>
-            {zoom.toFixed(1)}×
-          </span>
-
-          {/* Zoom in */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(MAX_ZOOM, parseFloat((z + 0.5).toFixed(1)))); }}
-            style={btnStyle(zoom >= MAX_ZOOM)}
-            title="Zoom in (+)"
-          >
-            <ZoomIn size={15} />
-          </button>
-
-          {/* Close — plain DOM button with inline handler, zero React event delegation issues */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
-            style={{ ...btnStyle(false), marginLeft: 10 }}
-            title="Close (Esc)"
-          >
-            <X size={17} />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 34, height: 34, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.13)', border: 'none', color: '#fff',
+            cursor: 'pointer', transition: 'background 0.15s',
+          }}
+          title="Close (Esc)"
+        >
+          <X size={17} />
+        </button>
       </div>
 
-      {/* Scrollable viewport when zoomed */}
+      {/* Image */}
       <div
         style={{
-          overflow: zoom > 1 ? 'auto' : 'hidden',
-          width: '100%', height: '100%',
+          overflow: 'hidden', width: '100%', height: '100%',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          paddingTop: 52, paddingBottom: 36,
-          boxSizing: 'border-box',
+          paddingTop: 52, paddingBottom: 36, boxSizing: 'border-box',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          style={{
-            position: 'relative',
-            display: 'inline-block',
-            cursor: zoom < MAX_ZOOM ? 'zoom-in' : 'zoom-out',
-            transform: `scale(${zoom})`,
-            transformOrigin: 'center center',
-            transition: 'transform 0.22s ease',
-          }}
-          onClick={handleCycleZoom}
-        >
+        <div style={{ position: 'relative', display: 'inline-block' }}>
           <img
             src={imageUrl}
             alt={label}
             style={{
-              display: 'block',
-              maxWidth: zoom <= 1 ? '88vw' : undefined,
-              maxHeight: zoom <= 1 ? '82vh' : undefined,
-              borderRadius: 8,
-              boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
-              userSelect: 'none',
-              WebkitUserDrag: 'none',
-              pointerEvents: 'none',
+              display: 'block', maxWidth: '88vw', maxHeight: '82vh',
+              borderRadius: 8, boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
+              userSelect: 'none', WebkitUserDrag: 'none',
             }}
             draggable={false}
           />
-          {/* Bounding box overlay */}
           <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
             {boxes.map((box, i) => (
               <g key={i}>
@@ -166,12 +99,11 @@ function Lightbox({ open, onClose, imageUrl, label, boxes, getBoundingBoxColor }
         </div>
       </div>
 
-      {/* Bottom hint */}
       <div style={{
         position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)',
         color: 'rgba(255,255,255,0.3)', fontSize: 11, whiteSpace: 'nowrap', pointerEvents: 'none',
       }}>
-        Click image to zoom · Esc to close
+        Esc or click outside to close
       </div>
     </div>
   );
@@ -179,19 +111,6 @@ function Lightbox({ open, onClose, imageUrl, label, boxes, getBoundingBoxColor }
   return createPortal(content, document.body);
 }
 
-function btnStyle(disabled) {
-  return {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: 34, height: 34, borderRadius: '50%',
-    background: 'rgba(255,255,255,0.13)',
-    border: 'none', color: '#fff',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.35 : 1,
-    transition: 'background 0.15s',
-  };
-}
-
-// ─── Main component ────────────────────────────────────────────────────────────
 export function DetectionResults({ submission, onBack, onSendToSupervisor, currentUser, onViewValidation }) {
   const [selectedSide, setSelectedSide] = useState('front');
   const [imageSizes, setImageSizes] = useState({});
@@ -203,6 +122,7 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
   const openLightbox = (side) => { setLightboxSide(side); setLightboxOpen(true); };
   const closeLightbox = () => setLightboxOpen(false);
 
+  const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
   const normalizeFaultType = (box) => String(box?.faultType || box?.class || box?.label || 'Unknown').trim();
   const isFeederPillar = (f) => String(f || '').trim().toLowerCase() === 'feeder pillar';
 
@@ -329,12 +249,24 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
                   const sideBoxes = (sideResult?.boundingBoxes ?? []).map(box => normalizeBox(box, imageSizes[side]));
                   const sideFaultBoxes = sideBoxes.filter(box => !isFeederPillar(box.faultType));
 
+                  const consolidatedFaults = sideFaultBoxes.reduce((acc, box) => {
+                    const key = box.faultType.toLowerCase();
+                    if (acc[key]) {
+                      acc[key].count += 1;
+                      acc[key].totalConfidence += box.confidence;
+                    } else {
+                      acc[key] = { ...box, count: 1, totalConfidence: box.confidence };
+                    }
+                    return acc;
+                  }, {});
+                  const faultList = Object.values(consolidatedFaults);
+
                   return (
                     <TabsContent key={side} value={side} className="space-y-4">
                       {sideResult ? (
                         <div>
                           <div
-                            className="relative inline-block w-full group cursor-zoom-in"
+                            className="relative inline-block w-full group cursor-pointer"
                             onClick={() => openLightbox(side)}
                             title="Click to view fullscreen"
                           >
@@ -370,32 +302,37 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
                               ))}
                             </svg>
                             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-lg">
-                              <div className="flex items-center gap-2 bg-black/60 text-white text-sm font-medium px-3 py-2 rounded-full backdrop-blur-sm">
-                                <ZoomIn className="h-4 w-4" /> View fullscreen
+                              <div className="bg-black/60 text-white text-sm font-medium px-3 py-2 rounded-full backdrop-blur-sm">
+                                View fullscreen
                               </div>
                             </div>
                           </div>
 
-                          {sideFaultBoxes.length > 0 ? (
+                          {faultList.length > 0 ? (
                             <div className="mt-4 space-y-2">
                               <h4 className="font-semibold text-sm">Detected Faults:</h4>
-                              {sideFaultBoxes.map((box, index) => (
-                                <div
-                                  key={index}
-                                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-4 h-4 rounded" style={{ backgroundColor: getBoundingBoxColor(box.faultType) }} />
-                                    <span className="font-medium">{box.faultType}</span>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-sm text-gray-600">Confidence: {Math.round(box.confidence * 100)}%</span>
-                                    <div className="w-24 bg-gray-200 rounded-full h-2">
-                                      <div className="h-2 rounded-full" style={{ width: `${box.confidence * 100}%`, backgroundColor: getBoundingBoxColor(box.faultType) }} />
+                              {faultList.map((fault, index) => {
+                                const avgConfidence = fault.totalConfidence / fault.count;
+                                return (
+                                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-4 h-4 rounded" style={{ backgroundColor: getBoundingBoxColor(fault.faultType) }} />
+                                      <span className="font-medium">{capitalize(fault.faultType)}</span>
+                                      {fault.count > 1 && (
+                                        <span className="text-xs font-semibold text-white bg-orange-500 rounded-full px-2 py-0.5">
+                                          ×{fault.count}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-sm text-gray-600">Confidence: {Math.round(avgConfidence * 100)}%</span>
+                                      <div className="w-24 bg-gray-200 rounded-full h-2">
+                                        <div className="h-2 rounded-full" style={{ width: `${avgConfidence * 100}%`, backgroundColor: getBoundingBoxColor(fault.faultType) }} />
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           ) : (
                             <div className="mt-4 p-6 bg-green-50 rounded-lg text-center">
@@ -438,7 +375,7 @@ export function DetectionResults({ submission, onBack, onSendToSupervisor, curre
                   {filteredFaults.length > 0 ? filteredFaults.map((fault, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-orange-600" />
-                      <span className="text-sm">{fault}</span>
+                      <span className="text-sm">{capitalize(fault)}</span>
                     </div>
                   )) : (
                     <p className="text-gray-500 text-sm">No non-feeder pillar faults detected.</p>

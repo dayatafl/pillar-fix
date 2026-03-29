@@ -32,6 +32,9 @@ export function AuditForm({ task, onBack, onSubmit }) {
   const streamRef = useRef(null);
   const captureToastIdRef = useRef(null);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
   useEffect(() => {
   window.scrollTo(0, 0);
 }, []);
@@ -146,29 +149,46 @@ export function AuditForm({ task, onBack, onSubmit }) {
   };
 
   const handleSubmit = async () => {
-    if (!allImagesUploaded || !currentCoordinates) return;
+    if (!allImagesUploaded || !currentCoordinates || isSubmitting) return;
+
+    setIsSubmitting(true);
+
     try {
       const { data } = await api.put(`/tasks/${task.id}/submit`, {
         image1: images.front, image2: images.right,
         image3: images.back,  image4: images.left,
         user_current_location: currentCoordinates,
       });
+
+      setIsSubmitted(true); // ✅ mark as submitted
+
       onSubmit({
-        id: data.photo_id, taskId: task.id,
-        pillarId: task.pillarId, location: task.location, address: task.address,
+        id: data.photo_id,
+        taskId: task.id,
+        pillarId: task.pillarId,
+        location: task.location,
+        address: task.address,
         dueDate: task.dueDate,
         coordinates: currentCoordinates,
         images: [
-          { side: 'front', imageUrl: images.front }, { side: 'right', imageUrl: images.right },
-          { side: 'back',  imageUrl: images.back  }, { side: 'left',  imageUrl: images.left  },
+          { side: 'front', imageUrl: images.front },
+          { side: 'right', imageUrl: images.right },
+          { side: 'back', imageUrl: images.back },
+          { side: 'left', imageUrl: images.left },
         ],
-        submittedBy: task.assignedTo, submittedAt: new Date().toISOString(),
-        detectionStatus: 'Completed', detectionResults: data.detectionResults,
-        overallRisk: data.overallRisk, validationStatus: 'Pending',
+        submittedBy: task.assignedTo,
+        submittedAt: new Date().toISOString(),
+        detectionStatus: 'Completed',
+        detectionResults: data.detectionResults,
+        overallRisk: data.overallRisk,
+        validationStatus: 'Pending',
       });
+
       toast.success('Audit submitted — AI detection complete');
     } catch (err) {
       toast.error(getApiErrorMessage(err, 'Submission failed'));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -393,9 +413,23 @@ export function AuditForm({ task, onBack, onSubmit }) {
             </CardContent>
           </Card>
 
-          <Button onClick={handleSubmit} disabled={!allImagesUploaded || !currentCoordinates} className="w-full" size="lg">
-            <Upload className="h-5 w-5 mr-2" />
-            Submit for AI Detection
+          <Button onClick={handleSubmit} disabled={!allImagesUploaded || !currentCoordinates || isSubmitting || isSubmitted} className="w-full" size="lg">
+            {isSubmitting ? (
+              <>
+                <span className="animate-spin mr-2">⏳</span>
+                Submitting...
+              </>
+            ) : isSubmitted ? (
+              <>
+                <Check className="h-5 w-5 mr-2" />
+                Submitted
+              </>
+            ) : (
+              <>
+                <Upload className="h-5 w-5 mr-2" />
+                Submit for AI Detection
+              </>
+            )}
           </Button>
         </div>
       </div>

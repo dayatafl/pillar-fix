@@ -221,14 +221,6 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
                     )}
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    {[...new Set(item.faults)].map((fault, idx) => (
-                      <Badge key={idx} variant="outline" className="text-xs">
-                        {fault}
-                      </Badge>
-                    ))}
-                  </div>
-
                   <div className="grid grid-cols-2 gap-3 pt-2 border-t text-sm">
                     <div className="flex items-center gap-1">
                       <span className="text-gray-600">Cost:</span>
@@ -265,14 +257,6 @@ export function MaintenanceList({ items, currentUser, onViewDetails, onUpdateSta
                       <div className="flex flex-wrap gap-2">
                         {item.status !== 'Pending' && item.status !== 'In Progress' && item.status !== 'Completed' && getStatusBadge(item.status)}
                       </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      {[...new Set(item.faults)].map((fault, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          {fault}
-                        </Badge>
-                      ))}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t">

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Upload, Plus, Calendar, Check, Clock, Camera, X, RotateCcw } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, Upload, Plus, Check, Clock, Camera, X, RotateCcw } from 'lucide-react';
 import api from '@/app/api';
 import { Button } from '@/app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
@@ -17,8 +18,118 @@ const SIDES = [
   { side: 'left',  label: 'Left'  },
 ];
 
-// ─── Camera Modal (matches AuditForm flex-col layout exactly) ─────────────────
+const capitalize = (str) => String(str).charAt(0).toUpperCase() + String(str).slice(1);
+const isFeederPillar = (f) => String(f || '').trim().toLowerCase() === 'feeder pillar';
 
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+function Lightbox({ open, onClose, imageUrl, label, boxes = [], getBoundingBoxColor }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
+  }, [open, onClose]);
+
+  if (!open || !imageUrl) return null;
+
+  const content = (
+    <div
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        width: '100vw', height: '100vh', zIndex: 2147483647,
+        backgroundColor: 'rgba(0,0,0,0.93)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxSizing: 'border-box',
+      }}
+      onClick={onClose}
+    >
+      {/* Top bar */}
+      <div
+        style={{
+          position: 'absolute', top: 0, left: 0, right: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 16px', zIndex: 1,
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          {label}
+        </span>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 34, height: 34, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.13)', border: 'none', color: '#fff',
+            cursor: 'pointer', transition: 'background 0.15s',
+          }}
+          title="Close (Esc)"
+        >
+          <X size={17} />
+        </button>
+      </div>
+
+      {/* Image */}
+      <div
+        style={{
+          overflow: 'hidden', width: '100%', height: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          paddingTop: 52, paddingBottom: 36, boxSizing: 'border-box',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <img
+            src={imageUrl}
+            alt={label}
+            style={{
+              display: 'block', maxWidth: '88vw', maxHeight: '82vh',
+              borderRadius: 8, boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
+              userSelect: 'none', WebkitUserDrag: 'none',
+            }}
+            draggable={false}
+          />
+          {boxes.length > 0 && (
+            <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+              {boxes.map((box, i) => (
+                <g key={i}>
+                  <rect
+                    x={`${box.x}%`} y={`${box.y}%`}
+                    width={`${box.width}%`} height={`${box.height}%`}
+                    fill="none" stroke={getBoundingBoxColor ? getBoundingBoxColor(box.faultType) : 'rgb(239,68,68)'}
+                    strokeWidth="2.5" strokeDasharray="5,4" opacity="0.95"
+                  />
+                  <text
+                    x={`${box.x + 0.8}%`} y={`${box.y + 2.8}%`}
+                    fill={getBoundingBoxColor ? getBoundingBoxColor(box.faultType) : 'rgb(239,68,68)'}
+                    fontSize="13" fontWeight="bold"
+                    style={{ filter: 'drop-shadow(1px 1px 3px rgba(0,0,0,0.9))' }}
+                  >
+                    {capitalize(box.faultType)} ({Math.round(box.confidence * 100)}%)
+                  </text>
+                </g>
+              ))}
+            </svg>
+          )}
+        </div>
+      </div>
+
+      <div style={{
+        position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)',
+        color: 'rgba(255,255,255,0.3)', fontSize: 11, whiteSpace: 'nowrap', pointerEvents: 'none',
+      }}>
+        Esc or click outside to close
+      </div>
+    </div>
+  );
+
+  return createPortal(content, document.body);
+}
+
+// ─── Camera Modal ─────────────────────────────────────────────────────────────
 function CameraModal({ onCapture, onClose, withSides = false }) {
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
@@ -30,7 +141,6 @@ function CameraModal({ onCapture, onClose, withSides = false }) {
   const [stream,        setStream]        = useState(null);
   const [cameraError,   setCameraError]   = useState('');
 
-  // ── stream management ──────────────────────────────────────────────────────
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
@@ -70,17 +180,13 @@ function CameraModal({ onCapture, onClose, withSides = false }) {
     return () => stopStream();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── controls ───────────────────────────────────────────────────────────────
   const handleFlip = async () => {
     const next = facingMode === 'environment' ? 'user' : 'environment';
     setFacingMode(next);
     await startCamera(next);
   };
 
-  const handleClose = () => {
-    stopStream();
-    onClose();
-  };
+  const handleClose = () => { stopStream(); onClose(); };
 
   const handleSnap = () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -95,15 +201,9 @@ function CameraModal({ onCapture, onClose, withSides = false }) {
       const updated = { ...capturedSides, [activeSide]: dataUrl };
       setCapturedSides(updated);
       onCapture(dataUrl);
-
       const currentIdx = SIDES.findIndex(s => s.side === activeSide);
       const nextSide   = SIDES.slice(currentIdx + 1).find(s => !updated[s.side]);
-      if (nextSide) {
-        setActiveSide(nextSide.side);
-      } else {
-        stopStream();
-        onClose();
-      }
+      if (nextSide) { setActiveSide(nextSide.side); } else { stopStream(); onClose(); }
     } else {
       onCapture(dataUrl);
       stopStream();
@@ -111,12 +211,9 @@ function CameraModal({ onCapture, onClose, withSides = false }) {
     }
   };
 
-  // ── render — identical flex-col structure to AuditForm ────────────────────
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col w-screen h-[100dvh] overflow-hidden">
       <canvas ref={canvasRef} className="hidden" />
-
-      {/* Top bar — matches AuditForm exactly */}
       <div className="flex items-center justify-between px-4 py-3 bg-black/70">
         <span className="text-white font-semibold text-sm">
           Capturing:{' '}
@@ -128,8 +225,6 @@ function CameraModal({ onCapture, onClose, withSides = false }) {
           <X className="h-6 w-6" />
         </button>
       </div>
-
-      {/* Side progress pills — matches AuditForm exactly */}
       <div className="flex items-center justify-center gap-2 py-2 bg-black/50">
         {withSides ? (
           SIDES.map(({ side, label }) => (
@@ -147,30 +242,18 @@ function CameraModal({ onCapture, onClose, withSides = false }) {
             </button>
           ))
         ) : (
-          // single-photo mode: no pills, keep the bar height consistent
           <span className="text-white/40 text-xs">Single photo</span>
         )}
       </div>
-
-      {/* Camera feed or error — matches AuditForm flex-1 pattern */}
       {cameraError ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
           <Camera className="h-16 w-16 text-gray-500" />
           <p className="text-white text-sm max-w-xs">{cameraError}</p>
-          <Button onClick={() => startCamera(facingMode)} variant="outline" size="sm">
-            Retry
-          </Button>
+          <Button onClick={() => startCamera(facingMode)} variant="outline" size="sm">Retry</Button>
         </div>
       ) : (
         <div className="flex-1 relative overflow-hidden">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover"
-          />
-          {/* Corner guides — matches AuditForm exactly */}
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           <div className="absolute inset-6 pointer-events-none">
             <div className="absolute top-0 left-0 w-20 h-20 border-t-[6px] border-l-[6px] border-red-500" />
             <div className="absolute top-0 right-0 w-20 h-20 border-t-[6px] border-r-[6px] border-red-500" />
@@ -180,13 +263,8 @@ function CameraModal({ onCapture, onClose, withSides = false }) {
           </div>
         </div>
       )}
-
-      {/* Bottom controls — matches AuditForm exactly */}
       <div className="flex items-center justify-between px-8 py-6 bg-black/70">
-        <button
-          onClick={handleFlip}
-          className="flex flex-col items-center gap-1 text-white/80 hover:text-white transition-colors"
-        >
+        <button onClick={handleFlip} className="flex flex-col items-center gap-1 text-white/80 hover:text-white transition-colors">
           <RotateCcw className="h-6 w-6" />
           <span className="text-xs">Flip</span>
         </button>
@@ -202,7 +280,6 @@ function CameraModal({ onCapture, onClose, withSides = false }) {
 }
 
 // ─── MaintenanceDetail ────────────────────────────────────────────────────────
-
 export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, onSubmitCompletion, onUpdateStatus }) {
   const [workLogAction, setWorkLogAction] = useState('');
   const [workLogNotes, setWorkLogNotes] = useState('');
@@ -211,12 +288,50 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
   const [showWorkLogCamera, setShowWorkLogCamera] = useState(false);
   const [showCompletionCamera, setShowCompletionCamera] = useState(false);
 
-  useEffect(() => {
-  window.scrollTo(0, 0);
-}, []);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxData, setLightboxData] = useState({ url: '', label: '', boxes: [] });
+  const [imageSizes, setImageSizes] = useState({});
+
+  useEffect(() => { window.scrollTo(0, 0); }, []);
 
   const fileInputRef = useRef(null);
   const workLogFileInputRef = useRef(null);
+
+  const openLightbox = (url, label, boxes = []) => { setLightboxData({ url, label, boxes }); setLightboxOpen(true); };
+  const closeLightbox = () => setLightboxOpen(false);
+
+  const normalizeFaultType = (box) => String(box?.faultType || box?.class || box?.label || 'Unknown').trim();
+
+  const toPercent = (value, dimension) => {
+    const n = Number(value ?? 0);
+    if (Number.isNaN(n) || n <= 0) return 0;
+    if (n <= 1) return Math.min(100, Math.max(0, n * 100));
+    if (dimension && dimension > 0) {
+      if (n <= dimension) return Math.min(100, Math.max(0, (n / dimension) * 100));
+      if (n <= 100) return Math.min(100, Math.max(0, n));
+    }
+    return Math.min(100, Math.max(0, n));
+  };
+
+  const normalizeBox = (box, size) => {
+    const faultType = normalizeFaultType(box);
+    const confidence = Number(box?.confidence ?? box?.confidence_level ?? 0);
+    const width = toPercent(box?.width, size?.width);
+    const height = toPercent(box?.height, size?.height);
+    const centerX = toPercent(box?.x, size?.width);
+    const centerY = toPercent(box?.y, size?.height);
+    const x = Math.max(0, centerX - width / 2);
+    const y = Math.max(0, centerY - height / 2);
+    return { x, y, width: Math.min(width, 100 - x), height: Math.min(height, 100 - y), confidence, faultType };
+  };
+
+  const getBoundingBoxColor = (faultType) => ({
+    'rust': 'rgb(239, 68, 68)',
+    'Vandalisme': 'rgb(234, 179, 8)',
+    'slanted': 'rgb(239, 68, 68)',
+    'unlocked': 'rgb(168, 85, 247)',
+    'feeder pillar': 'rgb(16, 185, 129)',
+  }[faultType] || 'rgb(107, 114, 128)');
 
   const handleAddWorkLog = async () => {
     if (!workLogAction.trim() || !workLogNotes.trim()) {
@@ -225,10 +340,8 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
     try {
       await api.put(`/tasks/${item.taskId}/maintenance`, {
         maintenance_status: "In Progress",
-        action: workLogAction,
-        notes: workLogNotes,
-        images: workLogImages,
-        logged_by: currentUser.employeeId,
+        action: workLogAction, notes: workLogNotes,
+        images: workLogImages, logged_by: currentUser.employeeId,
       });
       onUpdateWorkLog(item.id, {
         id: Date.now().toString(), timestamp: new Date().toISOString(),
@@ -263,8 +376,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
         maintenance_status: "Completed",
         action: "Completion evidence submitted",
         notes: "Post-maintenance photos uploaded",
-        images: completionImages,
-        logged_by: currentUser.employeeId,
+        images: completionImages, logged_by: currentUser.employeeId,
         completion_evidence: completionImages[0],
         maintenance_validate_by: currentUser.employeeId,
       });
@@ -288,9 +400,19 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
     });
   };
 
+  const displayFaults = (item.faults ?? []).filter(f => !isFeederPillar(f));
+
   return (
     <div className="space-y-6">
-      {/* Camera Modals */}
+      <Lightbox
+        open={lightboxOpen}
+        onClose={closeLightbox}
+        imageUrl={lightboxData.url}
+        label={lightboxData.label}
+        boxes={lightboxData.boxes}
+        getBoundingBoxColor={getBoundingBoxColor}
+      />
+
       {showWorkLogCamera && (
         <CameraModal
           onCapture={(dataUrl) => setWorkLogImages(prev => [...prev, dataUrl])}
@@ -307,11 +429,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
 
       {/* Header */}
       <div className="flex items-center gap-3 sm:gap-4">
-        <Button
-          variant="outline"
-          onClick={onBack}
-          className="h-9 w-9 p-0 sm:h-9 sm:w-auto sm:px-4 sm:py-2"
-        >
+        <Button variant="outline" onClick={onBack} className="h-9 w-9 p-0 sm:h-9 sm:w-auto sm:px-4 sm:py-2">
           <ArrowLeft className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Back</span>
         </Button>
@@ -322,50 +440,84 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Previous Detection */}
+
+          {/* Previous AI Detection */}
           <Card>
-            <CardHeader>
-              <CardTitle>Previous AI Detection</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Previous AI Detection</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {item.previousDetections?.length > 0
                   ? ['front', 'right', 'back', 'left'].map((side) => {
                       const detection = item.previousDetections.find(d => d.side === side);
+                      if (!detection) return <div key={side} />;
+                      const sizeKey = `detection_${side}`;
+                      const boxes = (detection.boundingBoxes ?? []).map(b => normalizeBox(b, imageSizes[sizeKey]));
+
                       return (
                         <div key={side} className="space-y-2">
                           <p className="text-sm font-medium capitalize">{side}</p>
-                          {detection && (
-                            <>
-                              <img
-                                src={detection.imageUrl}
-                                alt={side}
-                                className="w-full h-32 object-cover rounded-lg border"
-                              />
-                              <p className="text-xs text-gray-600">
-                                {detection.boundingBoxes?.length ?? 0} fault(s)
-                              </p>
-                            </>
-                          )}
+                          <div
+                            className="relative group cursor-pointer"
+                            onClick={() => openLightbox(detection.imageUrl, `${side.toUpperCase()} — ${item.pillarId}`, boxes)}
+                            title="Click to view fullscreen"
+                          >
+                            <img
+                              src={detection.imageUrl}
+                              alt={side}
+                              className="w-full h-32 object-cover rounded-lg border transition-[filter] duration-200 group-hover:brightness-75"
+                              onLoad={(e) =>
+                                setImageSizes(prev => ({
+                                  ...prev,
+                                  [sizeKey]: { width: e.target.naturalWidth, height: e.target.naturalHeight },
+                                }))
+                              }
+                            />
+                            <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
+                              {boxes.map((box, i) => (
+                                <g key={i}>
+                                  <rect
+                                    x={`${box.x}%`} y={`${box.y}%`}
+                                    width={`${box.width}%`} height={`${box.height}%`}
+                                    fill="none" stroke={getBoundingBoxColor(box.faultType)}
+                                    strokeWidth="2.5" strokeDasharray="5,4" opacity="0.95"
+                                  />
+                                  <text
+                                    x={`${box.x + 0.8}%`} y={`${box.y + 2.8}%`}
+                                    fill={getBoundingBoxColor(box.faultType)}
+                                    fontSize="11" fontWeight="bold"
+                                    style={{ filter: 'drop-shadow(1px 1px 2px rgba(0,0,0,0.9))' }}
+                                  >
+                                    {capitalize(box.faultType)}
+                                  </text>
+                                </g>
+                              ))}
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-lg">
+                              <div className="bg-black/60 text-white text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm">
+                                Fullscreen
+                              </div>
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-600">
+                            {(detection.boundingBoxes ?? []).filter(b => !isFeederPillar(normalizeFaultType(b))).length} fault(s)
+                          </p>
                         </div>
                       );
                     })
-                  : (
-                    <p className="col-span-4 text-sm text-gray-500 text-center py-4">
-                      No detection images available
-                    </p>
-                  )
+                  : <p className="col-span-4 text-sm text-gray-500 text-center py-4">No detection images available</p>
                 }
               </div>
 
               <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                 <h4 className="font-semibold mb-2">Detected Faults:</h4>
                 <div className="flex flex-wrap gap-2">
-                  {item.faults.map((fault, idx) => (
-                    <Badge key={idx} variant="outline">{fault}</Badge>
-                  ))}
+                  {displayFaults.length > 0
+                    ? displayFaults.map((fault, idx) => (
+                        <Badge key={idx} variant="outline">{capitalize(fault)}</Badge>
+                      ))
+                    : <p className="text-sm text-gray-500">No faults detected.</p>
+                  }
                 </div>
               </div>
             </CardContent>
@@ -373,9 +525,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
 
           {/* Work Logs */}
           <Card>
-            <CardHeader>
-              <CardTitle>Work Log History</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Work Log History</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-4 mb-6">
                 {item.workLogs.length === 0 ? (
@@ -394,18 +544,28 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                         </div>
                       </div>
                       <p className="text-xs text-gray-500 mt-2">By: {log.logged_by_name}</p>
-
                       {log.images && log.images.length > 0 && (
                         <div className="mt-3">
                           <p className="text-xs text-gray-600 mb-2">Evidence Photos:</p>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                             {log.images.map((img, idx) => (
-                              <img
+                              <div
                                 key={idx}
-                                src={img}
-                                alt={`Work evidence ${idx + 1}`}
-                                className="w-full h-20 object-cover rounded border"
-                              />
+                                className="relative group cursor-pointer"
+                                onClick={() => openLightbox(img, `Work Log — ${log.action} (${idx + 1})`)}
+                                title="Click to view fullscreen"
+                              >
+                                <img
+                                  src={img}
+                                  alt={`Work evidence ${idx + 1}`}
+                                  className="w-full h-20 object-cover rounded border transition-[filter] duration-200 group-hover:brightness-75"
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded">
+                                  <div className="bg-black/60 text-white text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm">
+                                    View
+                                  </div>
+                                </div>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -418,152 +578,93 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
               {item.status !== 'Completed' && item.status !== 'Verified' && (
                 <div className="space-y-4 pt-4 border-t">
                   <h4 className="font-semibold">Add Work Log</h4>
-
                   <div>
                     <Label htmlFor="action" className="block mb-2">Action Performed</Label>
-                    <Input
-                      id="action"
-                      value={workLogAction}
-                      onChange={(e) => setWorkLogAction(e.target.value)}
-                      placeholder="e.g., Replaced damaged panel"
-                    />
+                    <Input id="action" value={workLogAction} onChange={(e) => setWorkLogAction(e.target.value)} placeholder="e.g., Replaced damaged panel" />
                   </div>
-
                   <div>
                     <Label htmlFor="notes" className="block mb-2">Notes</Label>
-                    <Textarea
-                      id="notes"
-                      value={workLogNotes}
-                      onChange={(e) => setWorkLogNotes(e.target.value)}
-                      placeholder="Details of work performed..."
-                      rows={3}
-                    />
+                    <Textarea id="notes" value={workLogNotes} onChange={(e) => setWorkLogNotes(e.target.value)} placeholder="Details of work performed..." rows={3} />
                   </div>
-
                   <div>
                     <Label className="block mb-2">Images</Label>
-                    <input
-                      ref={workLogFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleWorkLogImageSelect}
-                      className="hidden"
-                    />
+                    <input ref={workLogFileInputRef} type="file" accept="image/*" multiple onChange={handleWorkLogImageSelect} className="hidden" />
                     <div className="space-y-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowWorkLogCamera(true)}
-                        className="w-full"
-                      >
-                        <Camera className="h-4 w-4 mr-2" />
-                        Take Photo
+                      <Button variant="outline" onClick={() => setShowWorkLogCamera(true)} className="w-full">
+                        <Camera className="h-4 w-4 mr-2" /> Take Photo
                       </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => workLogFileInputRef.current?.click()}
-                        className="w-full"
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload Work Log Images ({workLogImages.length})
+                      <Button variant="outline" onClick={() => workLogFileInputRef.current?.click()} className="w-full">
+                        <Upload className="h-4 w-4 mr-2" /> Upload Work Log Images ({workLogImages.length})
                       </Button>
                     </div>
-
                     {workLogImages.length > 0 && (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
                         {workLogImages.map((img, idx) => (
-                          <div key={idx} className="relative">
+                          <div key={idx} className="relative group">
                             <img
                               src={img}
                               alt={`Work Log ${idx + 1}`}
-                              className="w-full h-24 object-cover rounded-lg border"
+                              className="w-full h-24 object-cover rounded-lg border cursor-pointer transition-[filter] duration-200 group-hover:brightness-75"
+                              onClick={() => openLightbox(img, `Work Log Photo ${idx + 1}`)}
                             />
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-lg">
+                              <div className="bg-black/60 text-white text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm">View</div>
+                            </div>
                             <button
                               onClick={() => setWorkLogImages(prev => prev.filter((_, i) => i !== idx))}
-                              className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
-                            >
-                              ✕
-                            </button>
+                              className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700 z-10"
+                            >✕</button>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
-
-                  <Button
-                    onClick={() => { handleAddWorkLog(); onUpdateStatus(item.id, 'In Progress'); }}
-                    className="w-full"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Work Log
+                  <Button onClick={() => { handleAddWorkLog(); onUpdateStatus(item.id, 'In Progress'); }} className="w-full">
+                    <Plus className="h-4 w-4 mr-2" /> Add Work Log
                   </Button>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Completion Evidence - Upload Form */}
+          {/* Completion Evidence - Upload */}
           {item.status === 'In Progress' && (
             <Card>
-              <CardHeader>
-                <CardTitle>Submit Completion Evidence</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle>Submit Completion Evidence</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  Upload images from all 4 sides of the pillar after maintenance completion
-                </p>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageSelect}
-                  className="hidden"
-                />
+                <p className="text-sm text-gray-600">Upload images from all 4 sides of the pillar after maintenance completion</p>
+                <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleImageSelect} className="hidden" />
                 <div className="space-y-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowCompletionCamera(true)}
-                    className="w-full"
-                  >
-                    <Camera className="h-4 w-4 mr-2" />
-                    Take Photo
+                  <Button variant="outline" onClick={() => setShowCompletionCamera(true)} className="w-full">
+                    <Camera className="h-4 w-4 mr-2" /> Take Photo
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full"
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload Completion Images ({completionImages.length}/4)
+                  <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full">
+                    <Upload className="h-4 w-4 mr-2" /> Upload Completion Images ({completionImages.length}/4)
                   </Button>
                 </div>
-
                 {completionImages.length > 0 && (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {completionImages.map((img, idx) => (
-                      <div key={idx} className="relative">
+                      <div key={idx} className="relative group">
                         <img
                           src={img}
                           alt={`Completion ${idx + 1}`}
-                          className="w-full h-24 object-cover rounded-lg border"
+                          className="w-full h-24 object-cover rounded-lg border cursor-pointer transition-[filter] duration-200 group-hover:brightness-75"
+                          onClick={() => openLightbox(img, `Completion Photo ${idx + 1}`)}
                         />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-lg">
+                          <div className="bg-black/60 text-white text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm">View</div>
+                        </div>
                         <button
                           onClick={() => setCompletionImages(prev => prev.filter((_, i) => i !== idx))}
-                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
-                        >
-                          ✕
-                        </button>
+                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700 z-10"
+                        >✕</button>
                       </div>
                     ))}
                   </div>
                 )}
-
                 {completionImages.length >= 4 && (
-                  <Button className="w-full" size="lg" onClick={handleSubmitCompletion}>
-                    Submit
-                  </Button>
+                  <Button className="w-full" size="lg" onClick={handleSubmitCompletion}>Submit</Button>
                 )}
               </CardContent>
             </Card>
@@ -572,27 +673,32 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
           {/* Completion Evidence - View */}
           {item.status === 'Completed' && item.completion && (
             <Card>
-              <CardHeader>
-                <CardTitle>Completion Evidence</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle>Completion Evidence</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 {item.completion.images?.length > 0 ? (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {item.completion.images.map((img, idx) => (
-                      <img
+                      <div
                         key={idx}
-                        src={img}
-                        alt={`Completion ${idx + 1}`}
-                        className="w-full h-24 object-cover rounded-lg border"
-                      />
+                        className="relative group cursor-pointer"
+                        onClick={() => openLightbox(img, `Completion Evidence ${idx + 1}`)}
+                        title="Click to view fullscreen"
+                      >
+                        <img
+                          src={img}
+                          alt={`Completion ${idx + 1}`}
+                          className="w-full h-24 object-cover rounded-lg border transition-[filter] duration-200 group-hover:brightness-75"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-lg">
+                          <div className="bg-black/60 text-white text-xs font-medium px-2 py-1 rounded-full backdrop-blur-sm">View</div>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ) : (
                   <p className="text-gray-500 text-center py-4">No completion images available</p>
                 )}
-                <p className="text-xs text-gray-500">
-                  Submitted: {new Date(item.completion.timestamp).toLocaleString()}
-                </p>
+                <p className="text-xs text-gray-500">Submitted: {new Date(item.completion.timestamp).toLocaleString()}</p>
               </CardContent>
             </Card>
           )}
@@ -601,45 +707,29 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
         {/* Sidebar */}
         <div className="space-y-6">
           <Card>
-            <CardHeader className="pb-4">
-              <CardTitle>Maintenance Information</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-4"><CardTitle>Maintenance Information</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <Label className="text-gray-600">Status</Label>
-                <div className="mt-1">
-                  <Badge>{item.status}</Badge>
-                </div>
+                <div className="mt-1"><Badge>{item.status}</Badge></div>
               </div>
 
               {onUpdateStatus && item.status !== 'Completed' && item.status !== 'Verified' && (
                 <div className="space-y-2">
                   <Label className="text-gray-600">Update Status</Label>
                   {item.status !== 'In Progress' && (
-                    <Button
-                      variant="outline"
-                      className="w-full gap-2"
-                      onClick={() => {
-                        onUpdateStatus(item.id, 'In Progress');
-                        toast.success('Status updated to In Progress');
-                      }}
+                    <Button variant="outline" className="w-full gap-2"
+                      onClick={() => { onUpdateStatus(item.id, 'In Progress'); toast.success('Status updated to In Progress'); }}
                     >
-                      <Clock className="h-4 w-4" />
-                      Mark as In Progress
+                      <Clock className="h-4 w-4" /> Mark as In Progress
                     </Button>
                   )}
                   {item.status === 'In Progress' && (
-                    <Button
-                      variant="default"
-                      className="w-full gap-2 bg-green-600 hover:bg-green-700"
+                    <Button variant="default" className="w-full gap-2 bg-green-600 hover:bg-green-700"
                       disabled={item.workLogs.length === 0 || !item.completion}
-                      onClick={() => {
-                        onUpdateStatus(item.id, 'Completed');
-                        toast.success('Status updated to Completed');
-                      }}
+                      onClick={() => { onUpdateStatus(item.id, 'Completed'); toast.success('Status updated to Completed'); }}
                     >
-                      <Check className="h-4 w-4" />
-                      Mark as Completed
+                      <Check className="h-4 w-4" /> Mark as Completed
                     </Button>
                   )}
                 </div>
@@ -653,9 +743,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                     item.severity === 'High'     ? 'bg-orange-100 text-orange-700' :
                     item.severity === 'Medium'   ? 'bg-yellow-100 text-yellow-700' :
                     'bg-blue-100 text-blue-700'
-                  }>
-                    {item.severity}
-                  </Badge>
+                  }>{item.severity}</Badge>
                 </div>
               </div>
 
@@ -675,9 +763,7 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                 <div>
                   <Label className="text-gray-600">Due Date</Label>
                   <div className="mt-1 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-3 py-2">
-                    <span className="text-sm font-semibold text-red-900">
-                      {new Date(item.scheduledDate).toLocaleDateString()}
-                    </span>
+                    <span className="text-sm font-semibold text-red-900">{new Date(item.scheduledDate).toLocaleDateString()}</span>
                     <Badge className="bg-red-600 text-white hover:bg-red-600">Due</Badge>
                   </div>
                 </div>
@@ -694,20 +780,14 @@ export function MaintenanceDetail({ item, currentUser, onBack, onUpdateWorkLog, 
                 <div>
                   <Label className="text-gray-600">Approved By</Label>
                   <p className="font-medium">{item.approvedBy}</p>
-                  {item.approvedAt && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(item.approvedAt).toLocaleDateString()}
-                    </p>
-                  )}
+                  {item.approvedAt && <p className="text-xs text-gray-500 mt-1">{new Date(item.approvedAt).toLocaleDateString()}</p>}
                 </div>
               )}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="pb-4">
-              <CardTitle>Location Details</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-4"><CardTitle>Location Details</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div>
                 <Label className="text-gray-600">Address</Label>
