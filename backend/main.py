@@ -30,7 +30,7 @@ app.add_middleware(
 
 models.Base.metadata.create_all(bind=engine)
 
-INFERENCE_URL = "https://pillarfix-inference-ftvjv.ondigitalocean.app/inspect"
+INFERENCE_URL = "http://localhost:8000/inspect"
 
 # Historical yearly actuals (verified benchmarks for 2023-2025)
 HISTORICAL_YEARLY_COSTS = {

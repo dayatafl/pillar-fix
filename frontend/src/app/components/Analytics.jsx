@@ -15,6 +15,9 @@ import 'leaflet/dist/leaflet.css';
 
 const DEFAULT_COORDINATES = { lat: 3.1390, lng: 101.6869 };
 
+const capitalize = (str) => String(str).charAt(0).toUpperCase() + String(str).slice(1).toLowerCase();
+const isFeederPillar = (f) => String(f || '').trim().toLowerCase() === 'feeder pillar';
+
 async function geocodeLocality(locality) {
   try {
     const res = await fetch(
@@ -415,9 +418,10 @@ export function Analytics({ maintenanceItems, tasks = [] }) {
     .sort((a, b) => b.issueCount - a.issueCount);
 
   const faultTypeData = maintenanceItems.reduce((acc, item) => {
-    (item.faults || []).forEach(fault => {
-      const ex = acc.find(a => a.name === fault);
-      if (ex) ex.value += 1; else acc.push({ name: fault, value: 1 });
+    (item.faults || []).filter(f => !isFeederPillar(f)).forEach(fault => {
+      const normalized = capitalize(fault);
+      const ex = acc.find(a => a.name === normalized);
+      if (ex) ex.value += 1; else acc.push({ name: normalized, value: 1 });
     });
     return acc;
   }, []);
