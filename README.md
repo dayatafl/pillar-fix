@@ -1,4 +1,4 @@
-# hexa-core-new
+# hexa-core
 
 
 
